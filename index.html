@@ -292,17 +292,11 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <div class="row">
         <button id="btnRetry" type="button" disabled>Hatalıları yeniden dene</button>
-        <button id="btnGeo" type="button" disabled>GeoJSON</button>
+        <button id="btnGeo" type="button" disabled>Yedekle (.json)</button>
         <button id="btnKml" type="button" disabled>KML</button>
         <button id="btnCsv" type="button" disabled>CSV</button>
-        <button class="ghost" id="btnImport" type="button">Yedek dosyası aç (.json)</button>
-        <button id="btnCopyBackup" type="button" disabled>Yedeği kopyala</button>
-        <button class="ghost" id="btnPasteBackup" type="button">Yedek yapıştır</button>
+        <button class="ghost" id="btnImport" type="button">Yedekten yükle</button>
         <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json" hidden>
-      </div>
-      <div id="pasteWrap" hidden style="display:flex;flex-direction:column;gap:8px">
-        <textarea id="pasteBox" spellcheck="false" placeholder="Kopyaladığınız yedek metnini buraya yapıştırın" style="min-height:90px;white-space:pre-wrap"></textarea>
-        <div class="row"><button class="primary" id="btnPasteLoad" type="button">Yedeği yükle</button><button class="ghost" id="btnPasteCancel" type="button">Vazgeç</button></div>
       </div>
     </section>
 
@@ -781,7 +775,7 @@ function ocrToList(text){
       (cnt.bekliyor + cnt.sorgulaniyor ? '<span class="chip">' + (cnt.bekliyor + cnt.sorgulaniyor) + ' bekliyor</span>' : '') : '';
     var found = cnt.bulundu > 0;
     $('btnGeo').disabled = $('btnKml').disabled = $('btnCsv').disabled = !rows.length;
-    $('btnGeo').disabled = $('btnKml').disabled = $('btnCopyBackup').disabled = !found;
+    $('btnGeo').disabled = $('btnKml').disabled = !found;
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
     $('btnStop').disabled = !running;
@@ -988,12 +982,10 @@ function ocrToList(text){
     })};
     return JSON.stringify(fc);
   }
-  $('btnGeo').addEventListener('click', function(){ download('parseller.geojson', geoText(), 'application/geo+json'); });
-  $('btnCopyBackup').addEventListener('click', async function(){
-    try {
-      await navigator.clipboard.writeText(geoText());
-      showNotice('Yedek panoya kopyalandı (' + foundRows().length + ' parsel). Bir not uygulamasına veya e-postaya yapıştırıp saklayın. Geri yüklemek için "Yedek yapıştır" düğmesini kullanın.', true);
-    } catch (e) { showNotice('Panoya kopyalanamadı. Yedeği Paylaş menüsünden GeoJSON düğmesiyle gönderin.'); }
+  $('btnGeo').addEventListener('click', function(){
+    var d = new Date(), z = function(n){ return String(n).padStart(2, '0'); };
+    var stamp = d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes());
+    download('parsel-yedek-' + stamp + '.geojson', geoText(), 'application/geo+json');
   });
   function kmlColor(hex, alpha){
     var h = hex.replace('#', '');
@@ -1036,6 +1028,7 @@ function ocrToList(text){
         if (!feats.length) throw new Error('Dosyada çokgen (Polygon) bulunamadı.');
         var fc = firstCoord(feats[0].geometry.coordinates);
         if (Math.abs(fc[0]) > 180) throw new Error('Koordinatlar enlem/boylam değil (EPSG:4326 bekleniyor).');
+        group.clearLayers(); rows.length = 0; selected = null;
         feats.forEach(function(f, i){
           var p = f.properties || {};
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
@@ -1043,20 +1036,12 @@ function ocrToList(text){
             status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null};
           rows.push(r); drawRow(r);
         });
-        showNotice(''); renderTable(); fitAll();
+        showNotice(feats.length + ' parsel yedekten yüklendi (önceki sonuçların yerine).', true); renderTable(); fitAll();
       } catch (err) { showNotice('Dosya açılamadı: ' + err.message); }
     };
     fr.readAsText(file);
   }
   $('fileImport').addEventListener('change', function(e){ var f = e.target.files[0]; if (f) readGeoFile(f); e.target.value = ''; });
-  $('btnPasteBackup').addEventListener('click', function(){ $('pasteWrap').hidden = false; $('pasteBox').focus(); });
-  $('btnPasteCancel').addEventListener('click', function(){ $('pasteWrap').hidden = true; $('pasteBox').value = ''; });
-  $('btnPasteLoad').addEventListener('click', function(){
-    var t = $('pasteBox').value.trim();
-    if (!t) { showNotice('Önce yedek metnini yapıştırın.'); return; }
-    readGeoFile(new File([t], 'yapistirilan.json', {type: 'application/json'}));
-    $('pasteWrap').hidden = true; $('pasteBox').value = '';
-  });
 
   /* ---------- tam ekran ---------- */
   var fsOn = false;

@@ -164,8 +164,9 @@ details[open] summary{margin-bottom:10px}
 .legend svg{display:block}
 
 .parsel-label{
-  background:rgba(255,255,255,.92);color:#15262d;border:1px solid #15262d;border-radius:2px;
-  font:500 11px var(--font-mono);padding:1px 4px;box-shadow:none
+  background:transparent;color:#111;border:0;border-radius:0;padding:0;box-shadow:none;
+  font:700 12px var(--font-mono);white-space:nowrap;pointer-events:none;
+  text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff,1px 1px 0 #fff,-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff
 }
 .parsel-label::before{display:none}
 .hide-labels .parsel-label{display:none}
@@ -547,6 +548,24 @@ function niceScale(m){
   c.forEach(function(v){ if (v <= m) best = v; });
   return best;
 }
+function poleOf(g){
+  var polys = ringsOf(g); if (!polys.length) return null;
+  var minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, best = null, c0 = centroidOf(g) || [0, 0];
+  polys.forEach(function(poly){ poly[0].forEach(function(c){ minX = Math.min(minX, c[0]); maxX = Math.max(maxX, c[0]); minY = Math.min(minY, c[1]); maxY = Math.max(maxY, c[1]); }); });
+  function scan(x0, x1, y0, y1, n){
+    for (var i = 0; i <= n; i++) for (var j = 0; j <= n; j++) {
+      var x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * j / n;
+      if (!inGeom(g, x, y)) continue;
+      var d = distM(g, x, y), dc = (x - c0[0]) * (x - c0[0]) + (y - c0[1]) * (y - c0[1]);
+      if (!best || d > best.r * 1.02 || (d >= best.r * 0.98 && dc < best.dc)) best = {lng: x, lat: y, r: Math.max(d, best ? best.r * 0 : 0), dc: dc};
+    }
+  }
+  scan(minX, maxX, minY, maxY, 28);
+  if (!best) { var c = centroidOf(g); return c ? {lng: c[0], lat: c[1], r: 0} : null; }
+  var wx = (maxX - minX) / 28, wy = (maxY - minY) / 28;
+  scan(best.lng - wx, best.lng + wx, best.lat - wy, best.lat + wy, 16);
+  return best;
+}
 /*PURE-END*/
 
 (function(){
@@ -765,16 +784,30 @@ function niceScale(m){
     if (ci) ci.addEventListener('input', function(){ go(ci.value); });
   });
   map.on('popupclose', function(){ $('mapwrap').classList.remove('popup-open'); });
+  function sizeTip(r){
+    if (!r.tip || !r.pole) return;
+    var el = r.tip.getElement && r.tip.getElement(); if (!el) return;
+    var mpp = 156543.03392 * Math.cos(r.pole.lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+    var fs = Math.min(16, 1.8 * (r.pole.r / mpp) / (0.62 * (String(r.ada) + '/' + String(r.parsel)).length));
+    el.style.fontSize = Math.max(fs, 0) + 'px';
+    el.style.visibility = fs < 8 ? 'hidden' : 'visible';
+  }
   function applyLabel(r){
     if (!r.layer) return;
-    var on = $('showLabels').checked;
-    r.layer.eachLayer(function(l){
-      l.unbindTooltip();
-      if (on) l.bindTooltip(esc(r.ada) + '/' + esc(r.parsel), {permanent: true, direction: 'center', className: 'parsel-label', opacity: 1});
-    });
+    if (r.tip) { r.layer.removeLayer(r.tip); r.tip = null; }
+    if (!$('showLabels').checked || !r.feature) return;
+    if (!r.pole) r.pole = poleOf(r.feature.geometry);
+    if (!r.pole) return;
+    r.tip = L.tooltip({permanent: true, direction: 'center', className: 'parsel-label', opacity: 1, interactive: false})
+      .setLatLng([r.pole.lat, r.pole.lng]).setContent(esc(r.ada) + '/' + esc(r.parsel));
+    r.tip.on('add', function(){ sizeTip(r); });
+    r.layer.addLayer(r.tip);
+    sizeTip(r);
   }
+  map.on('zoomend', function(){ rows.forEach(sizeTip); });
   function drawRow(r){
     if (r.layer) { group.removeLayer(r.layer); r.layer = null; }
+    r.tip = null;
     var layer = L.geoJSON(r.feature, {renderer: rend, style: function(){ return polyStyle(r); }});
     layer.eachLayer(function(l){ l.on('click', function(e){ selectRow(r, false); showPopup(r, e.latlng); }); });
     group.addLayer(layer);
@@ -1319,16 +1352,18 @@ function niceScale(m){
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw + 3 * u; ctx.stroke();
       ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
     });
-    // etiketler
+    // etiketler: parselin içinde, kutusuz, ince beyaz kenarlıklı
     if (o.labels) {
-    var fs = Math.round(24 * u); ctx.font = '600 ' + fs + 'px system-ui, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    items.forEach(function(r){
-      var lp = labelPoint(r.feature.geometry); if (!lp) return;
-      var q = P(lp[0], lp[1]), t = r.ada + '/' + r.parsel, tw = ctx.measureText(t).width, pw = tw + fs * 0.7, ph = fs * 1.35;
-      ctx.fillStyle = 'rgba(255,255,255,0.93)'; roundRect(ctx, q[0] - pw / 2, q[1] - ph / 2, pw, ph, fs * 0.25); ctx.fill();
-      ctx.strokeStyle = '#15262d'; ctx.lineWidth = Math.max(1.5, u * 1.5); ctx.stroke();
-      ctx.fillStyle = '#15262d'; ctx.fillText(t, q[0], q[1] + 1);
-    });
+      var mppL = 156543.03392 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) / Math.pow(2, z), maxFs = 26 * u, minFs = 11 * u;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      items.forEach(function(r){
+        var pl = poleOf(r.feature.geometry); if (!pl) return;
+        var q = P(pl.lng, pl.lat), t = r.ada + '/' + r.parsel;
+        var fs = Math.max(minFs, Math.min(maxFs, 1.8 * (pl.r / mppL) / (0.6 * t.length)));
+        ctx.font = '700 ' + Math.round(fs) + 'px system-ui, Arial, sans-serif';
+        ctx.lineWidth = Math.max(3, fs * 0.28); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(t, q[0], q[1]);
+        ctx.fillStyle = '#111'; ctx.fillText(t, q[0], q[1]);
+      });
     }
     // ölçek çubuğu
     var midLat = (minLat + maxLat) / 2, mpp = 156543.03392 * Math.cos(midLat * Math.PI / 180) / Math.pow(2, z);

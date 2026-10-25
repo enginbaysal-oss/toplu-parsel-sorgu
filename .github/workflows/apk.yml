@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['index.html', 'manifest.webmanifest', 'sw.js', 'icon-*.png', '.github/workflows/apk.yml']
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,3 +37,10 @@ jobs:
         with:
           name: parsel-haritasi-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: APK'yi Release olarak yayinla
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk parsel-haritasi.apk
+          gh release delete apk-son --yes --cleanup-tag || true
+          gh release create apk-son parsel-haritasi.apk --target main --title "Parsel Haritası APK" --notes "Android için son sürüm. İndirip kurun."

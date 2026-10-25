@@ -950,8 +950,9 @@ function ocrToList(text){
     var cap = window.Capacitor, P = cap && cap.Plugins;
     if (cap && cap.isNativePlatform && cap.isNativePlatform() && P && P.Filesystem && P.Share) {
       try {
-        var w = await P.Filesystem.writeFile({path: name, data: text, directory: 'CACHE', encoding: 'utf8'});
-        await P.Share.share({title: name, text: name, url: w.uri, dialogTitle: 'Dosyayı kaydet veya paylaş'});
+        var shareName = name.replace(/\.geojson$/i, '.json');
+        var w = await P.Filesystem.writeFile({path: shareName, data: text, directory: 'CACHE', encoding: 'utf8'});
+        await P.Share.share({title: shareName, url: w.uri, dialogTitle: 'Dosyayı kaydet veya paylaş'});
       } catch (e) {
         if (e && /cancel/i.test(String(e.message || e))) return;
         try { await navigator.clipboard.writeText(text); showNotice('Dosya paylaşılamadı, içerik panoya kopyalandı. Bir nota yapıştırıp saklayabilirsiniz.', true); }

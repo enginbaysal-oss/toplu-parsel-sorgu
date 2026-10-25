@@ -788,9 +788,10 @@ function poleOf(g){
     if (!r.tip || !r.pole) return;
     var el = r.tip.getElement && r.tip.getElement(); if (!el) return;
     var mpp = 156543.03392 * Math.cos(r.pole.lat * Math.PI / 180) / Math.pow(2, map.getZoom());
-    var fs = Math.min(16, 1.8 * (r.pole.r / mpp) / (0.62 * (String(r.ada) + '/' + String(r.parsel)).length));
-    el.style.fontSize = Math.max(fs, 0) + 'px';
-    el.style.visibility = fs < 8 ? 'hidden' : 'visible';
+    var rpx = r.pole.r / mpp, fs = Math.min(16, 1.8 * rpx / (0.62 * (String(r.ada) + '/' + String(r.parsel)).length));
+    el.style.fontSize = Math.max(fs, 12) + 'px';
+    el.style.visibility = 'visible';
+    el.style.marginTop = fs < 12 ? (-(rpx + 12)) + 'px' : '0px';
   }
   function applyLabel(r){
     if (!r.layer) return;
@@ -1354,15 +1355,24 @@ function poleOf(g){
     });
     // etiketler: parselin içinde, kutusuz, ince beyaz kenarlıklı
     if (o.labels) {
-      var mppL = 156543.03392 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) / Math.pow(2, z), maxFs = 26 * u, minFs = 11 * u;
+      var mppL = 156543.03392 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) / Math.pow(2, z), maxFs = 26 * u, minFs = 18 * u;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
       items.forEach(function(r){
         var pl = poleOf(r.feature.geometry); if (!pl) return;
         var q = P(pl.lng, pl.lat), t = r.ada + '/' + r.parsel;
-        var fs = Math.max(minFs, Math.min(maxFs, 1.8 * (pl.r / mppL) / (0.6 * t.length)));
+        var natural = 1.8 * (pl.r / mppL) / (0.6 * t.length), fs = Math.min(maxFs, Math.max(minFs, natural)), ly = q[1];
         ctx.font = '700 ' + Math.round(fs) + 'px system-ui, Arial, sans-serif';
-        ctx.lineWidth = Math.max(3, fs * 0.28); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(t, q[0], q[1]);
-        ctx.fillStyle = '#111'; ctx.fillText(t, q[0], q[1]);
+        if (natural < minFs) {
+          // parsel küçük: etiket okunur boyutta parselin hemen üstüne, ince çizgiyle bağlanır
+          var topY = 1e12;
+          ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){ topY = Math.min(topY, P(c[0], c[1])[1]); }); });
+          ly = Math.max(hH + fs, topY - fs * 1.1 - lw);
+          ctx.beginPath(); ctx.moveTo(q[0], ly + fs * 0.55); ctx.lineTo(q[0], q[1]);
+          ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(4, lw + 2 * u); ctx.stroke();
+          ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1.5, u * 1.6); ctx.stroke();
+        }
+        ctx.lineWidth = Math.max(3, fs * 0.28); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(t, q[0], ly);
+        ctx.fillStyle = '#111'; ctx.fillText(t, q[0], ly);
       });
     }
     // ölçek çubuğu

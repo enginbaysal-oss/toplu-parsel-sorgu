@@ -271,11 +271,11 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
           <select id="outFmt"><option value="pdf">PDF (harita + liste)</option><option value="jpg">JPEG (yalnız harita)</option></select>
         </label>
         <label class="f grow">Kalite
-          <select id="outQ"><option value="3600">Normal</option><option value="5000" selected>Yüksek</option><option value="7000">Çok yüksek</option></select>
+          <select id="outQ"><option value="5000000">Normal</option><option value="10000000" selected>Yüksek</option><option value="20000000">Çok yüksek</option></select>
         </label>
       </div>
       <button class="primary" id="btnExport" type="button">Çıktı al</button>
-      <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Çok yüksek kalite telefonda bellek yetmezse hata verebilir.</p>
+      <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Telefonda bellek yetmezse kalite kendiliğinden düşürülüp yeniden denenir.</p>
     </section>
 
     <section>
@@ -541,10 +541,11 @@ function worldPx(lng, lat, z){
   var s = 256 * Math.pow(2, z), sinLat = Math.sin(lat * Math.PI / 180);
   return {x: (lng + 180) / 360 * s, y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * s};
 }
-function chooseZoom(minLng, minLat, maxLng, maxLat, maxSide, maxZ){
+function chooseZoom(minLng, minLat, maxLng, maxLat, maxSide, maxZ, maxArea){
   for (var z = maxZ; z > 1; z--) {
     var a = worldPx(minLng, maxLat, z), b = worldPx(maxLng, minLat, z);
-    if (Math.max(b.x - a.x, b.y - a.y) <= maxSide) return z;
+    var w = b.x - a.x, hh = b.y - a.y;
+    if (Math.max(w, hh) <= maxSide && (!maxArea || Math.max(w, 1600) * Math.max(hh, 1000) <= maxArea)) return z;
   }
   return 1;
 }
@@ -1521,14 +1522,18 @@ function niceScale(m){
     if (minLng > maxLng) throw new Error('Çizilecek parsel yok');
     var padX = Math.max((maxLng - minLng) * 0.12, 0.0002), padY = Math.max((maxLat - minLat) * 0.12, 0.0002);
     minLng -= padX; maxLng += padX; minLat -= padY; maxLat += padY;
-    var z = chooseZoom(minLng, minLat, maxLng, maxLat, o.maxSide, 19);
+    var z = chooseZoom(minLng, minLat, maxLng, maxLat, 8000, 19, o.maxArea);
     var tl = worldPx(minLng, maxLat, z), br = worldPx(maxLng, minLat, z);
     var W = Math.max(1600, Math.ceil(br.x - tl.x)), H = Math.max(1000, Math.ceil(br.y - tl.y));
     var ox = (tl.x + br.x) / 2 - W / 2, oy = (tl.y + br.y) / 2 - H / 2;
     var u = Math.max(1, W / 1800), hH = Math.round(120 * u), fH = Math.round(100 * u);
+    var style = $('hatchStyle').value, globalColor = $('hatchColor').value, hs = Math.round(14 * u);
+    var tiny = document.createElement('canvas').getContext('2d'), pat = {};
+    items.forEach(function(r){ var c = r.color || globalColor; if (!pat[c]) pat[c] = hatchPattern(tiny, c, style, hs, Math.max(2, 2 * u)); });
+    var footPat = hatchPattern(tiny, globalColor, style, Math.round(10 * u), Math.max(2, 1.6 * u));
     var cv = document.createElement('canvas'); cv.width = W; cv.height = H + hH + fH;
     var ctx = cv.getContext('2d');
-    if (!ctx) throw new Error('Tuval oluşturulamadı, kaliteyi düşürün');
+    if (!ctx || cv.width !== W) throw new Error('Bellek yetersiz');
     ctx.fillStyle = '#e8ecee'; ctx.fillRect(0, 0, cv.width, cv.height);
 
     // altlık karoları
@@ -1562,12 +1567,10 @@ function niceScale(m){
 
     // parseller
     var P = function(lng, lat){ var w = worldPx(lng, lat, z); return [w.x - ox, w.y - oy + hH]; };
-    var style = $('hatchStyle').value, globalColor = $('hatchColor').value;
-    var lw = Math.max(3, 3.2 * u), pat = {}, hs = Math.round(14 * u);
+    var lw = Math.max(3, 3.2 * u);
     ctx.save(); ctx.beginPath(); ctx.rect(0, hH, W, H); ctx.clip();
     items.forEach(function(r){
       var color = r.color || globalColor;
-      if (!pat[color]) pat[color] = hatchPattern(ctx, color, style, hs, Math.max(2, 2 * u));
       ctx.beginPath();
       ringsOf(r.feature.geometry).forEach(function(poly){ poly.forEach(function(ring){
         ring.forEach(function(c, i){ var q = P(c[0], c[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
@@ -1610,7 +1613,7 @@ function niceScale(m){
     ctx.textAlign = 'right'; ctx.fillText(new Date().toLocaleDateString('tr-TR'), W - 36 * u, hH * 0.42);
     // alt bant
     ctx.fillStyle = '#f1f5f6'; ctx.fillRect(0, hH + H, W, fH);
-    ctx.fillStyle = hatchPattern(ctx, globalColor, style, Math.round(10 * u), Math.max(2, 1.6 * u));
+    ctx.fillStyle = footPat;
     ctx.fillRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
     ctx.strokeStyle = globalColor; ctx.lineWidth = 2 * u; ctx.strokeRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
     ctx.fillStyle = '#15262d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '500 ' + Math.round(21 * u) + 'px system-ui, Arial, sans-serif';
@@ -1690,8 +1693,18 @@ function niceScale(m){
     var res = null;
     try {
       showNotice('Harita hazırlanıyor…', true);
-      res = await renderMapImage({title: title, base: $('base').value, maxSide: parseInt($('outQ').value, 10) || 5000,
-        onProgress: function(pc){ showNotice('Harita karoları indiriliyor… %' + pc, true); }});
+      var cap0 = window.Capacitor, isNat = !!(cap0 && cap0.isNativePlatform && cap0.isNativePlatform());
+      var budget = (parseInt($('outQ').value, 10) || 10000000) * (isNat ? 1 : 2.5), lastErr = null;
+      for (var attempt = 0; attempt < 3 && !res; attempt++) {
+        try {
+          res = await renderMapImage({title: title, base: $('base').value, maxArea: budget,
+            onProgress: function(pc){ showNotice('Harita karoları indiriliyor… %' + pc, true); }});
+        } catch (e) {
+          lastErr = e; res = null; budget = budget / 2.5;
+          if (attempt < 2) showNotice('Bellek yetmedi, daha düşük kaliteyle yeniden deneniyor…', true);
+        }
+      }
+      if (!res) throw lastErr || new Error('Harita oluşturulamadı');
       if (res.failed === res.total) showNotice('Altlık harita indirilemedi, çıktı yalnızca parsellerle hazırlanıyor.', false);
       showNotice('Dosya hazırlanıyor…', true);
       if ($('outFmt').value === 'jpg') {

@@ -55,9 +55,10 @@ jobs:
                   String name = call.getString("name");
                   String data = call.getString("data");
                   String mime = call.getString("mime", "application/octet-stream");
-                  if (name == null || data == null) { call.reject("name ve data gerekli"); return; }
+                  String b64 = call.getString("base64");
+                  if (name == null || (data == null && b64 == null)) { call.reject("name ve data gerekli"); return; }
                   try {
-                      byte[] bytes = data.getBytes("UTF-8");
+                      byte[] bytes = b64 != null ? android.util.Base64.decode(b64, android.util.Base64.DEFAULT) : data.getBytes("UTF-8");
                       JSObject ret = new JSObject();
                       if (Build.VERSION.SDK_INT >= 29) {
                           ContentResolver r = getContext().getContentResolver();

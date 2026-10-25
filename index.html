@@ -263,6 +263,22 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
 
     <section>
+      <h2>Müşteri çıktısı</h2>
+      <p class="hint">Tüm parselleri kapsayan, büyütüldüğünde detayı görülen harita görüntüsü. PDF'te ikinci sayfadan itibaren parsel listesi de bulunur.</p>
+      <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası"></label>
+      <div class="row">
+        <label class="f grow">Biçim
+          <select id="outFmt"><option value="pdf">PDF (harita + liste)</option><option value="jpg">JPEG (yalnız harita)</option></select>
+        </label>
+        <label class="f grow">Kalite
+          <select id="outQ"><option value="3600">Normal</option><option value="5000" selected>Yüksek</option><option value="7000">Çok yüksek</option></select>
+        </label>
+      </div>
+      <button class="primary" id="btnExport" type="button">Çıktı al</button>
+      <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Çok yüksek kalite telefonda bellek yetmezse hata verebilir.</p>
+    </section>
+
+    <section>
       <div class="sec-h"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
       <div class="tablewrap">
         <table>
@@ -298,6 +314,20 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button class="ghost" id="btnImport" type="button">Yedekten yükle</button>
         <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json" hidden>
       </div>
+    </section>
+
+    <section>
+      <h2>Müşteri çıktısı</h2>
+      <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası" spellcheck="false"></label>
+      <div class="row">
+        <label class="f grow">Biçim<select id="outFmt"><option value="pdf">PDF</option><option value="jpg">JPEG</option></select></label>
+        <label class="f grow">Kalite<select id="outQual"><option value="3200">Normal</option><option value="5000">Yüksek</option></select></label>
+        <label class="f grow">PDF sayfa<select id="outPage"><option value="a4">A4</option><option value="a3">A3</option></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="outLabels" checked> Parsel etiketleri (ada/parsel)</label>
+      <label class="check"><input type="checkbox" id="outList" checked> PDF'e parsel listesi sayfası ekle</label>
+      <button class="primary" id="btnExport" type="button" disabled>Çıktı al</button>
+      <p class="hint">Tüm parselleri kapsayan harita, Görünüm bölümünde seçtiğiniz altlık (harita veya uydu), tarama ve renklerle hazırlanır. PDF'te büyütünce detay korunur.</p>
     </section>
 
     <section>
@@ -506,6 +536,22 @@ function ocrToList(text){
     out.push(lastMah + '\t' + ada + '\t' + parsel);
   });
   return {lines: out, skipped: skipped};
+}
+function worldPx(lng, lat, z){
+  var s = 256 * Math.pow(2, z), sinLat = Math.sin(lat * Math.PI / 180);
+  return {x: (lng + 180) / 360 * s, y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * s};
+}
+function chooseZoom(minLng, minLat, maxLng, maxLat, maxSide, maxZ){
+  for (var z = maxZ; z > 1; z--) {
+    var a = worldPx(minLng, maxLat, z), b = worldPx(maxLng, minLat, z);
+    if (Math.max(b.x - a.x, b.y - a.y) <= maxSide) return z;
+  }
+  return 1;
+}
+function niceScale(m){
+  var c = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 50000], best = c[0];
+  c.forEach(function(v){ if (v <= m) best = v; });
+  return best;
 }
 /*PURE-END*/
 
@@ -776,6 +822,7 @@ function ocrToList(text){
     var found = cnt.bulundu > 0;
     $('btnGeo').disabled = $('btnKml').disabled = $('btnCsv').disabled = !rows.length;
     $('btnGeo').disabled = $('btnKml').disabled = !found;
+    $('btnExport').disabled = !found || exporting;
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
     $('btnStop').disabled = !running;
@@ -1168,6 +1215,508 @@ function ocrToList(text){
   }
   $('btnLoc').addEventListener('click', function(){ if (me.id != null) stopGeo(); else startGeo(); });
   map.on('dragstart', function(){ $('follow').checked = false; });
+
+  /* ---------- çıktı (JPEG / PDF) ---------- */
+  var TILE_URL = {
+    street: ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    sat: ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    labels: ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    osm: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+  };
+  var CREDIT = {
+    street: 'Altlık: Esri, HERE, Garmin, OpenStreetMap katkıda bulunanları',
+    sat: 'Altlık: Esri, Maxar, Earthstar Geographics',
+    hybrid: 'Altlık: Esri, Maxar, Earthstar Geographics',
+    osm: 'Altlık: © OpenStreetMap katkıda bulunanları'
+  };
+  var FONT = '"IBM Plex Sans","Segoe UI",Roboto,Arial,sans-serif';
+  function mercX(lng, z){ return (lng + 180) / 360 * 256 * Math.pow(2, z); }
+  function mercY(lat, z){ var s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * Math.pow(2, z); }
+  function loadImg(url){
+    return new Promise(function(res){
+      var im = new Image(); im.crossOrigin = 'anonymous';
+      im.onload = function(){ res(im); }; im.onerror = function(){ res(null); };
+      im.src = url;
+    });
+  }
+  function hatchPattern(ctx, color, u){
+    var n = Math.max(9, Math.round(9 * u)), s = $('hatchStyle').value, cv = document.createElement('canvas');
+    cv.width = cv.height = n;
+    var c = cv.getContext('2d');
+    c.fillStyle = color; c.globalAlpha = s === 'dolgu' ? 0.38 : 0.13; c.fillRect(0, 0, n, n); c.globalAlpha = 1;
+    c.strokeStyle = color; c.lineWidth = Math.max(1.6, 1.6 * u);
+    function ln(a, b, d, e){ c.beginPath(); c.moveTo(a, b); c.lineTo(d, e); c.stroke(); }
+    if (s === 'capraz' || s === 'cift') { ln(0, n, n, 0); ln(-n / 2, n / 2, n / 2, -n / 2); ln(n / 2, n * 1.5, n * 1.5, n / 2); }
+    if (s === 'cift') { ln(0, 0, n, n); ln(n / 2, -n / 2, n * 1.5, n / 2); ln(-n / 2, n / 2, n / 2, n * 1.5); }
+    if (s === 'yatay') ln(0, n / 2, n, n / 2);
+    return ctx.createPattern(cv, 'repeat');
+  }
+  function mapCanvasPath(ctx, g, Z, x0, y0){
+    ringsOf(g).forEach(function(poly){ poly.forEach(function(ring){
+      ring.forEach(function(pt, i){
+        var X = mercX(pt[0], Z) - x0, Y = mercY(pt[1], Z) - y0;
+        if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+      });
+      ctx.closePath();
+    }); });
+  }
+  function toBlobAsync(cv, type, q){ return new Promise(function(res){ cv.toBlob(res, type, q); }); }
+  function blobToBase64(blob){
+    return new Promise(function(res, rej){
+      var fr = new FileReader();
+      fr.onload = function(){ res(String(fr.result).split(',')[1]); };
+      fr.onerror = function(){ rej(new Error('Dosya hazırlanamadı')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+  async function downloadBlob(name, blob, mime){
+    var cap = window.Capacitor, P = cap && cap.Plugins;
+    if (cap && cap.isNativePlatform && cap.isNativePlatform() && P) {
+      var b64 = await blobToBase64(blob);
+      if (P.FileSaver) {
+        try { await P.FileSaver.save({name: name, base64: b64, mime: mime}); showNotice('Telefonun İndirilenler klasörüne kaydedildi: ' + name + '. Dosyalar uygulamasından açıp müşteriye gönderebilirsiniz.', true); return; }
+        catch (e) { /* paylaşım menüsüne düş */ }
+      }
+      if (P.Filesystem && P.Share) {
+        try {
+          var w = await P.Filesystem.writeFile({path: name, data: b64, directory: 'CACHE'});
+          await P.Share.share({title: name, url: w.uri, dialogTitle: 'Dosyayı kaydet veya paylaş'});
+        } catch (e) { if (!(e && /cancel/i.test(String(e.message || e)))) showNotice('Dosya kaydedilemedi: ' + ((e && e.message) || e)); }
+        return;
+      }
+    }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  function loadJsPdf(){
+    return new Promise(function(res, rej){
+      if (window.jspdf) return res();
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res;
+      s.onerror = function(){ rej(new Error('PDF kütüphanesi yüklenemedi. İnternet bağlantısını kontrol edin.')); };
+      document.head.appendChild(s);
+    });
+  }
+  function listPageCanvases(list, title, dateStr){
+    var W = 1240, H = 1754, perPage = 33, pages = [], total = list.length;
+    for (var p = 0; p * perPage < total || p === 0; p++) {
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+      var c = cv.getContext('2d');
+      c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
+      c.fillStyle = '#0e5560'; c.fillRect(0, 0, W, 110);
+      c.fillStyle = '#ffffff'; c.font = '600 38px ' + FONT; c.textBaseline = 'alphabetic';
+      c.fillText(title, 60, 55);
+      c.font = '400 22px ' + FONT; c.fillText('Parsel listesi · ' + total + ' parsel · ' + dateStr, 60, 90);
+      var y = 170, cols = [60, 130, 560, 800, 1010];
+      c.fillStyle = '#586a72'; c.font = '600 20px ' + FONT;
+      ['No', 'Mahalle', 'Ada / Parsel', 'Alan (m²)', 'Nitelik'].forEach(function(t, i){ c.fillText(t, cols[i], y); });
+      c.strokeStyle = '#cdd7db'; c.lineWidth = 2; c.beginPath(); c.moveTo(60, y + 14); c.lineTo(W - 60, y + 14); c.stroke();
+      y += 56;
+      list.slice(p * perPage, (p + 1) * perPage).forEach(function(r, i){
+        var no = p * perPage + i + 1, pr = r.props || {};
+        c.fillStyle = r.color || $('hatchColor').value; c.fillRect(1180 - 0, y - 20, 0, 0);
+        c.fillStyle = '#15262d'; c.font = '400 22px ' + FONT;
+        c.fillText(String(no), cols[0], y);
+        c.fillStyle = r.color || $('hatchColor').value; c.fillRect(cols[1] - 28, y - 18, 16, 16);
+        c.fillStyle = '#15262d';
+        var mah = String(r.mah || ''); if (mah.length > 30) mah = mah.slice(0, 29) + '…';
+        c.fillText(mah, cols[1], y);
+        c.font = '600 22px ' + FONT; c.fillText(r.ada + ' / ' + r.parsel, cols[2], y);
+        c.font = '400 22px ' + FONT;
+        var al = fmtArea(prop(pr, ['alan', 'tapuAlani', 'yuzolcumu'])); c.fillText(al, cols[3], y);
+        var nit = String(prop(pr, ['nitelik']) || ''); if (nit.length > 22) nit = nit.slice(0, 21) + '…'; c.fillText(nit, cols[4], y);
+        c.strokeStyle = '#e1e8eb'; c.lineWidth = 1; c.beginPath(); c.moveTo(60, y + 16); c.lineTo(W - 60, y + 16); c.stroke();
+        y += 46;
+      });
+      c.fillStyle = '#586a72'; c.font = '400 18px ' + FONT;
+      c.fillText('Kaynak: TKGM Parsel Sorgu. Sınırlar bilgi amaçlıdır, kesin sınır yerine geçmez.', 60, H - 50);
+      c.fillText('Sayfa ' + (p + 1) + ' / ' + Math.max(1, Math.ceil(total / perPage)), W - 220, H - 50);
+      pages.push(cv);
+    }
+    return pages;
+  }
+  var exporting = false;
+  async function exportMap(){
+    if (exporting) return;
+    var list = rows.filter(function(r){ return r.feature; });
+    if (!list.length) { showNotice('Önce parselleri sorgulayın.'); return; }
+    exporting = true; $('btnExport').disabled = true;
+    try {
+      var fmt = $('outFmt').value, L = parseInt($('outQual').value, 10) || 3200;
+      var baseKey = $('base').value, wantLabels = $('outLabels').checked;
+      var title = $('outTitle').value.trim() || 'Parsel Haritası';
+      var dateStr = new Date().toLocaleDateString('tr-TR');
+      var minLng = 180, maxLng = -180, minLat = 90, maxLat = -90;
+      list.forEach(function(r){ ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(pt){
+        if (pt[0] < minLng) minLng = pt[0]; if (pt[0] > maxLng) maxLng = pt[0];
+        if (pt[1] < minLat) minLat = pt[1]; if (pt[1] > maxLat) maxLat = pt[1];
+      }); }); });
+      var Z = 19, x0, y0, x1, y1;
+      for (; Z >= 1; Z--) {
+        var bx0 = mercX(minLng, Z), bx1 = mercX(maxLng, Z), by0 = mercY(maxLat, Z), by1 = mercY(minLat, Z);
+        var pad = Math.max(bx1 - bx0, by1 - by0) * 0.08 + 48;
+        x0 = bx0 - pad; x1 = bx1 + pad; y0 = by0 - pad; y1 = by1 + pad;
+        if (Math.max(x1 - x0, y1 - y0) <= L) break;
+      }
+      if (Z < 1) Z = 1;
+      if (x1 - x0 < 1600) { var cx = (x0 + x1) / 2; x0 = cx - 800; x1 = cx + 800; }
+      if (y1 - y0 < 1100) { var cy = (y0 + y1) / 2; y0 = cy - 550; y1 = cy + 550; }
+      var mw = Math.round(x1 - x0), mh = Math.round(y1 - y0);
+      var u = Math.max(1, mw / 1400), hh = Math.round(70 * u), fh = Math.round(62 * u);
+      var cv = document.createElement('canvas'); cv.width = mw; cv.height = hh + mh + fh;
+      var ctx = cv.getContext('2d');
+      if (!ctx) throw new Error('Bellek yetersiz. Kaliteyi "Normal" yapıp yeniden deneyin.');
+      ctx.fillStyle = '#cfd8dc'; ctx.fillRect(0, hh, mw, mh);
+      // karolar
+      var layers = baseKey === 'hybrid' ? ['sat', 'labels'] : [baseKey];
+      var tx0 = Math.floor(x0 / 256), tx1 = Math.floor((x1 - 1) / 256), ty0 = Math.max(0, Math.floor(y0 / 256)), ty1 = Math.min(Math.pow(2, Z) - 1, Math.floor((y1 - 1) / 256));
+      var jobs = [];
+      layers.forEach(function(k){ for (var ty = ty0; ty <= ty1; ty++) for (var tx = tx0; tx <= tx1; tx++) jobs.push({k: k, x: tx, y: ty}); });
+      var done = 0, missing = 0, qi = 0;
+      ctx.save(); ctx.beginPath(); ctx.rect(0, hh, mw, mh); ctx.clip();
+      async function tileWorker(){
+        while (qi < jobs.length) {
+          var j = jobs[qi++];
+          var n = Math.pow(2, Z), tx = ((j.x % n) + n) % n;
+          var url = TILE_URL[j.k].replace('{z}', Z).replace('{x}', tx).replace('{y}', j.y);
+          var im = await loadImg(url);
+          if (im) ctx.drawImage(im, Math.floor(j.x * 256 - x0), Math.floor(j.y * 256 - y0) + hh, 257, 257); else missing++;
+          done++;
+          if (done % 8 === 0 || done === jobs.length) showNotice('Harita hazırlanıyor… %' + Math.round(done / jobs.length * 100), true);
+        }
+      }
+      var ws = []; for (var wi = 0; wi < 8; wi++) ws.push(tileWorker());
+      await Promise.all(ws);
+      ctx.restore();
+      // parseller
+      ctx.save(); ctx.beginPath(); ctx.rect(0, hh, mw, mh); ctx.clip();
+      var patCache = {}, sw = Math.max(2.5, 2.2 * u);
+      list.forEach(function(r){
+        var col = r.color || $('hatchColor').value;
+        ctx.beginPath(); mapCanvasPath(ctx, r.feature.geometry, Z, x0, y0 - hh);
+        if (!patCache[col]) patCache[col] = hatchPattern(ctx, col, u);
+        ctx.fillStyle = patCache[col]; ctx.fill('evenodd');
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = sw * 2.1; ctx.stroke();
+        ctx.strokeStyle = col; ctx.lineWidth = sw; ctx.stroke();
+      });
+      if (wantLabels) {
+        var fs = Math.max(15, Math.round(14 * u));
+        ctx.font = '600 ' + fs + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+        list.forEach(function(r){
+          var c = centroidOf(r.feature.geometry); if (!c) return;
+          var X = mercX(c[0], Z) - x0, Y = mercY(c[1], Z) - y0 + hh, t = r.ada + '/' + r.parsel;
+          ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = fs * 0.32; ctx.strokeText(t, X, Y);
+          ctx.fillStyle = '#10222a'; ctx.fillText(t, X, Y);
+        });
+      }
+      ctx.restore();
+      // ölçek çubuğu
+      var mpp = 156543.03392 * Math.cos((minLat + maxLat) / 2 * Math.PI / 180) / Math.pow(2, Z);
+      var nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 50000], target = mw * 0.16 * mpp, nl = nice[0];
+      nice.forEach(function(v){ if (v <= target) nl = v; });
+      var barPx = nl / mpp, bx = 26 * u, by = hh + mh - 30 * u;
+      ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.fillRect(bx - 12 * u, by - 30 * u, barPx + 24 * u, 52 * u);
+      ctx.fillStyle = '#10222a'; ctx.fillRect(bx, by, barPx, 5 * u);
+      ctx.fillRect(bx, by - 8 * u, 2 * u, 13 * u); ctx.fillRect(bx + barPx - 2 * u, by - 8 * u, 2 * u, 13 * u);
+      ctx.font = '600 ' + Math.round(15 * u) + 'px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(nl >= 1000 ? (nl / 1000) + ' km' : nl + ' m', bx, by - 12 * u);
+      // kuzey oku
+      var nx = mw - 46 * u, ny = hh + 78 * u;
+      ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.fillRect(nx - 26 * u, ny - 62 * u, 52 * u, 84 * u);
+      ctx.fillStyle = '#10222a'; ctx.beginPath(); ctx.moveTo(nx, ny - 48 * u); ctx.lineTo(nx + 12 * u, ny); ctx.lineTo(nx, ny - 10 * u); ctx.lineTo(nx - 12 * u, ny); ctx.closePath(); ctx.fill();
+      ctx.font = '700 ' + Math.round(17 * u) + 'px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('K', nx, ny + 17 * u);
+      // üst şerit
+      ctx.fillStyle = '#0e5560'; ctx.fillRect(0, 0, mw, hh);
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.font = '600 ' + Math.round(30 * u) + 'px ' + FONT; ctx.fillText(title, 28 * u, hh / 2);
+      ctx.textAlign = 'right'; ctx.font = '400 ' + Math.round(18 * u) + 'px ' + FONT;
+      ctx.fillText(list.length + ' parsel · ' + dateStr, mw - 28 * u, hh / 2);
+      // alt şerit
+      var fy = hh + mh;
+      ctx.fillStyle = '#f2f5f6'; ctx.fillRect(0, fy, mw, fh);
+      ctx.textAlign = 'left'; ctx.fillStyle = '#586a72'; ctx.font = '400 ' + Math.round(14 * u) + 'px ' + FONT;
+      ctx.fillText((CREDIT[baseKey] || '') + ' · Kaynak: TKGM Parsel Sorgu', 28 * u, fy + fh * 0.34);
+      ctx.fillText('Parsel sınırları bilgi amaçlıdır, kesin sınır yerine geçmez.', 28 * u, fy + fh * 0.72);
+      var stampD = new Date(), z2 = function(n){ return String(n).padStart(2, '0'); };
+      var stamp = stampD.getFullYear() + z2(stampD.getMonth() + 1) + z2(stampD.getDate()) + '-' + z2(stampD.getHours()) + z2(stampD.getMinutes());
+      if (fmt === 'jpg') {
+        showNotice('JPEG hazırlanıyor…', true);
+        var jb = await toBlobAsync(cv, 'image/jpeg', 0.92);
+        if (!jb) throw new Error('Görüntü oluşturulamadı. Kaliteyi "Normal" yapıp yeniden deneyin.');
+        await downloadBlob('parsel-haritasi-' + stamp + '.jpg', jb, 'image/jpeg');
+      } else {
+        showNotice('PDF hazırlanıyor…', true);
+        await loadJsPdf();
+        var pageFmt = $('outPage').value, landscape = cv.width >= cv.height;
+        var doc = new window.jspdf.jsPDF({orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: pageFmt, compress: true});
+        function place(canvas){
+          var pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight(), m = 8;
+          var sc = Math.min((pw - 2 * m) / canvas.width, (ph - 2 * m) / canvas.height);
+          var w = canvas.width * sc, h = canvas.height * sc;
+          doc.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pw - w) / 2, (ph - h) / 2, w, h);
+        }
+        place(cv);
+        if ($('outList').checked) {
+          listPageCanvases(list, title, dateStr).forEach(function(pc){ doc.addPage(pageFmt, 'portrait'); place(pc); });
+        }
+        await downloadBlob('parsel-haritasi-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');
+      }
+      showNotice((missing ? missing + ' harita karosu alınamadı, o bölgeler boş görünebilir. ' : '') + (fmt === 'jpg' ? 'JPEG hazır.' : 'PDF hazır.'), !missing);
+    } catch (e) {
+      showNotice('Çıktı alınamadı: ' + ((e && e.message) || e));
+    } finally { exporting = false; renderTable(); }
+  }
+  $('btnExport').addEventListener('click', exportMap);
+
+  /* ---------- çıktı: JPEG / PDF ---------- */
+  var ESRI_T = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+  function tileTemplates(base){
+    var main = (base === 'sat' || base === 'hybrid') ? 'World_Imagery' : 'World_Street_Map';
+    var t = [ESRI_T + main + '/MapServer/tile/{z}/{y}/{x}'];
+    if (base === 'hybrid') t.push(ESRI_T + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}');
+    return t;
+  }
+  function loadTile(url){
+    return fetch(url, {mode: 'cors'}).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }).then(function(b){ return createImageBitmap(b); });
+  }
+  function hatchPattern(ctx, color, style, s, lw){
+    var c = document.createElement('canvas'); c.width = c.height = s;
+    var x = c.getContext('2d');
+    x.fillStyle = color; x.globalAlpha = style === 'dolgu' ? 0.35 : 0.12; x.fillRect(0, 0, s, s);
+    x.globalAlpha = 1; x.strokeStyle = color; x.lineWidth = lw; x.lineCap = 'square';
+    if (style !== 'dolgu') {
+      x.beginPath();
+      if (style === 'yatay') { x.moveTo(0, s / 2); x.lineTo(s, s / 2); }
+      else {
+        x.moveTo(-1, s + 1); x.lineTo(s + 1, -1);
+        x.moveTo(-1 - s / 2, s / 2 + 1); x.lineTo(s / 2 + 1, -1 - s / 2);
+        x.moveTo(s / 2 - 1, s + 1 + s / 2); x.lineTo(s + 1 + s / 2, s / 2 - 1);
+        if (style === 'cift') { x.moveTo(-1, -1); x.lineTo(s + 1, s + 1); x.moveTo(-1 - s / 2, s / 2 - 1); x.lineTo(s / 2 + 1, s + 1 + s / 2); x.moveTo(s / 2 - 1, -1 - s / 2); x.lineTo(s + 1 + s / 2, s / 2 + 1); }
+      }
+      x.stroke();
+    }
+    return ctx.createPattern(c, 'repeat');
+  }
+  function labelPoint(g){
+    var c = centroidOf(g);
+    if (c && inGeom(g, c[0], c[1])) return c;
+    var poly = ringsOf(g)[0]; if (!poly) return c;
+    var r = poly[0], minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    r.forEach(function(q){ minX = Math.min(minX, q[0]); maxX = Math.max(maxX, q[0]); minY = Math.min(minY, q[1]); maxY = Math.max(maxY, q[1]); });
+    var bc = [(minX + maxX) / 2, (minY + maxY) / 2];
+    return inGeom(g, bc[0], bc[1]) ? bc : r[0];
+  }
+  function roundRect(x, X, Y, w, h, r){
+    x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath();
+  }
+  async function renderMapImage(o){
+    var items = foundRows();
+    var minLng = 181, maxLng = -181, minLat = 91, maxLat = -91;
+    items.forEach(function(r){ ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){
+      minLng = Math.min(minLng, c[0]); maxLng = Math.max(maxLng, c[0]); minLat = Math.min(minLat, c[1]); maxLat = Math.max(maxLat, c[1]);
+    }); }); });
+    if (minLng > maxLng) throw new Error('Çizilecek parsel yok');
+    var padX = Math.max((maxLng - minLng) * 0.12, 0.0002), padY = Math.max((maxLat - minLat) * 0.12, 0.0002);
+    minLng -= padX; maxLng += padX; minLat -= padY; maxLat += padY;
+    var z = chooseZoom(minLng, minLat, maxLng, maxLat, o.maxSide, 19);
+    var tl = worldPx(minLng, maxLat, z), br = worldPx(maxLng, minLat, z);
+    var W = Math.max(1600, Math.ceil(br.x - tl.x)), H = Math.max(1000, Math.ceil(br.y - tl.y));
+    var ox = (tl.x + br.x) / 2 - W / 2, oy = (tl.y + br.y) / 2 - H / 2;
+    var u = Math.max(1, W / 1800), hH = Math.round(120 * u), fH = Math.round(100 * u);
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H + hH + fH;
+    var ctx = cv.getContext('2d');
+    if (!ctx) throw new Error('Tuval oluşturulamadı, kaliteyi düşürün');
+    ctx.fillStyle = '#e8ecee'; ctx.fillRect(0, 0, cv.width, cv.height);
+
+    // altlık karoları
+    var base = o.base === 'osm' ? 'street' : o.base, n = Math.pow(2, z);
+    var x0 = Math.floor(ox / 256), x1 = Math.floor((ox + W - 1) / 256), y0 = Math.max(0, Math.floor(oy / 256)), y1 = Math.min(n - 1, Math.floor((oy + H - 1) / 256));
+    var jobs = [];
+    tileTemplates(base).forEach(function(tpl){
+      for (var ty = y0; ty <= y1; ty++) for (var tx = x0; tx <= x1; tx++) jobs.push({tpl: tpl, tx: tx, ty: ty});
+    });
+    var done = 0, failed = 0, total = jobs.length;
+    async function tileWorker(){
+      while (jobs.length) {
+        var j = jobs.shift(); if (!j) break;
+        try {
+          var wx = ((j.tx % n) + n) % n;
+          var bmp = await loadTile(j.tpl.replace('{z}', z).replace('{x}', wx).replace('{y}', j.ty));
+          ctx.drawImage(bmp, Math.floor(j.tx * 256 - ox), Math.floor(j.ty * 256 - oy + hH), 257, 257);
+          if (bmp.close) bmp.close();
+        } catch (e) { failed++; }
+        done++;
+        if (o.onProgress && done % 6 === 0) o.onProgress(Math.round(done / total * 100));
+      }
+    }
+    // katman sırası korunsun: önce ana karolar, sonra yer adları
+    var layers = tileTemplates(base).length, perLayer = jobs.length / layers, pools = [];
+    for (var li = 0; li < layers; li++) {
+      var chunk = jobs.splice(0, perLayer); var save = jobs; jobs = chunk;
+      var ws = []; for (var k = 0; k < 8; k++) ws.push(tileWorker());
+      await Promise.all(ws); jobs = save;
+    }
+
+    // parseller
+    var P = function(lng, lat){ var w = worldPx(lng, lat, z); return [w.x - ox, w.y - oy + hH]; };
+    var style = $('hatchStyle').value, globalColor = $('hatchColor').value;
+    var lw = Math.max(3, 3.2 * u), pat = {}, hs = Math.round(14 * u);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, hH, W, H); ctx.clip();
+    items.forEach(function(r){
+      var color = r.color || globalColor;
+      if (!pat[color]) pat[color] = hatchPattern(ctx, color, style, hs, Math.max(2, 2 * u));
+      ctx.beginPath();
+      ringsOf(r.feature.geometry).forEach(function(poly){ poly.forEach(function(ring){
+        ring.forEach(function(c, i){ var q = P(c[0], c[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+        ctx.closePath();
+      }); });
+      ctx.fillStyle = pat[color]; ctx.fill('evenodd');
+      ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw + 3 * u; ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
+    });
+    // etiketler
+    var fs = Math.round(24 * u); ctx.font = '600 ' + fs + 'px system-ui, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    items.forEach(function(r){
+      var lp = labelPoint(r.feature.geometry); if (!lp) return;
+      var q = P(lp[0], lp[1]), t = r.ada + '/' + r.parsel, tw = ctx.measureText(t).width, pw = tw + fs * 0.7, ph = fs * 1.35;
+      ctx.fillStyle = 'rgba(255,255,255,0.93)'; roundRect(ctx, q[0] - pw / 2, q[1] - ph / 2, pw, ph, fs * 0.25); ctx.fill();
+      ctx.strokeStyle = '#15262d'; ctx.lineWidth = Math.max(1.5, u * 1.5); ctx.stroke();
+      ctx.fillStyle = '#15262d'; ctx.fillText(t, q[0], q[1] + 1);
+    });
+    // ölçek çubuğu
+    var midLat = (minLat + maxLat) / 2, mpp = 156543.03392 * Math.cos(midLat * Math.PI / 180) / Math.pow(2, z);
+    var meters = niceScale(W * 0.16 * mpp), barPx = meters / mpp, bx = 36 * u, by = hH + H - 40 * u;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.fillRect(bx - 14 * u, by - 40 * u, barPx + 28 * u, 66 * u);
+    ctx.fillStyle = '#15262d'; ctx.fillRect(bx, by, barPx, 6 * u); ctx.fillRect(bx, by - 8 * u, 3 * u, 14 * u); ctx.fillRect(bx + barPx - 3 * u, by - 8 * u, 3 * u, 14 * u);
+    ctx.font = '600 ' + Math.round(20 * u) + 'px system-ui, Arial, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(meters >= 1000 ? (meters / 1000) + ' km' : meters + ' m', bx, by - 14 * u);
+    // kuzey oku
+    var nx = W - 60 * u, ny = hH + 90 * u;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)'; ctx.fillRect(nx - 36 * u, ny - 76 * u, 72 * u, 120 * u);
+    ctx.fillStyle = '#15262d'; ctx.beginPath(); ctx.moveTo(nx, ny - 60 * u); ctx.lineTo(nx + 18 * u, ny + 8 * u); ctx.lineTo(nx, ny - 6 * u); ctx.lineTo(nx - 18 * u, ny + 8 * u); ctx.closePath(); ctx.fill();
+    ctx.textAlign = 'center'; ctx.font = '700 ' + Math.round(24 * u) + 'px system-ui, Arial, sans-serif'; ctx.fillText('K', nx, ny + 36 * u);
+    ctx.restore();
+
+    // başlık bandı
+    ctx.fillStyle = '#0e5560'; ctx.fillRect(0, 0, W, hH);
+    ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '700 ' + Math.round(46 * u) + 'px system-ui, Arial, sans-serif'; ctx.fillText(o.title || 'Parsel Haritası', 36 * u, hH * 0.42);
+    ctx.font = '400 ' + Math.round(24 * u) + 'px system-ui, Arial, sans-serif';
+    var first = items[0], loc = [first.mah, first.ilce, first.il].filter(Boolean).join(' · ');
+    ctx.fillText(loc + (items.length > 1 ? '  ·  ' + items.length + ' parsel' : '  ·  ' + first.ada + ' ada ' + first.parsel + ' parsel'), 36 * u, hH * 0.76);
+    ctx.textAlign = 'right'; ctx.fillText(new Date().toLocaleDateString('tr-TR'), W - 36 * u, hH * 0.42);
+    // alt bant
+    ctx.fillStyle = '#f1f5f6'; ctx.fillRect(0, hH + H, W, fH);
+    ctx.fillStyle = hatchPattern(ctx, globalColor, style, Math.round(10 * u), Math.max(2, 1.6 * u));
+    ctx.fillRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
+    ctx.strokeStyle = globalColor; ctx.lineWidth = 2 * u; ctx.strokeRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
+    ctx.fillStyle = '#15262d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '500 ' + Math.round(21 * u) + 'px system-ui, Arial, sans-serif';
+    ctx.fillText('Sorgulanan parsel', 104 * u, hH + H + fH * 0.5);
+    ctx.textAlign = 'right'; ctx.font = '400 ' + Math.round(18 * u) + 'px system-ui, Arial, sans-serif';
+    ctx.fillText('Sınırlar TKGM Parsel Sorgu verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez. Altlık: Esri', W - 36 * u, hH + H + fH * 0.5);
+    return {canvas: cv, count: items.length, failed: failed, total: total, z: z};
+  }
+
+  function renderTablePages(items, title){
+    var PW = 1654, PH = 2339, M = 110, RH = 62, HH = 230, pages = [];
+    var cols = [{t: '#', w: 76}, {t: 'Mahalle', w: 380}, {t: 'İlçe / İl', w: 360}, {t: 'Ada', w: 110}, {t: 'Parsel', w: 130}, {t: 'Alan', w: 190}, {t: 'Nitelik', w: 188}];
+    var per = Math.floor((PH - HH - 70 - M) / RH), np = Math.max(1, Math.ceil(items.length / per));
+    function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
+    for (var pg = 0; pg < np; pg++) {
+      var c = document.createElement('canvas'); c.width = PW; c.height = PH; var x = c.getContext('2d');
+      x.fillStyle = '#ffffff'; x.fillRect(0, 0, PW, PH);
+      x.fillStyle = '#0e5560'; x.fillRect(0, 0, PW, 150);
+      x.fillStyle = '#ffffff'; x.textBaseline = 'middle'; x.textAlign = 'left';
+      x.font = '700 48px system-ui, Arial, sans-serif'; x.fillText(title || 'Parsel Haritası', M, 62);
+      x.font = '400 26px system-ui, Arial, sans-serif'; x.fillText('Parsel listesi · ' + items.length + ' parsel · ' + new Date().toLocaleDateString('tr-TR'), M, 112);
+      var y = HH, cx = M;
+      x.fillStyle = '#dfe8ea'; x.fillRect(M, y, PW - 2 * M, RH);
+      x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
+      cols.forEach(function(col){ x.fillText(col.t, cx + 8, y + RH / 2); cx += col.w; });
+      x.font = '400 24px system-ui, Arial, sans-serif';
+      items.slice(pg * per, (pg + 1) * per).forEach(function(r, i){
+        y += RH; cx = M;
+        if (i % 2) { x.fillStyle = '#f3f6f7'; x.fillRect(M, y, PW - 2 * M, RH); }
+        var p = r.props || {};
+        var vals = [pg * per + i + 1, r.mah, [r.ilce, r.il].filter(Boolean).join(' / '), r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik'])];
+        x.fillStyle = '#15262d';
+        cols.forEach(function(col, k){ x.fillText(fit(x, vals[k], col.w), cx + 8, y + RH / 2); cx += col.w; });
+      });
+      x.fillStyle = '#586a72'; x.font = '400 22px system-ui, Arial, sans-serif'; x.textAlign = 'center';
+      x.fillText('Sınırlar TKGM Parsel Sorgu verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez.  ·  Sayfa ' + (pg + 2), PW / 2, PH - 50);
+      pages.push(c);
+    }
+    return pages;
+  }
+  function loadJsPdf(){
+    return new Promise(function(res, rej){
+      if (window.jspdf) return res();
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; s.onerror = function(){ rej(new Error('PDF kütüphanesi yüklenemedi. İnternet bağlantısını kontrol edin.')); };
+      document.head.appendChild(s);
+    });
+  }
+  async function saveBlob(name, blob, mime){
+    var cap = window.Capacitor, P = cap && cap.Plugins;
+    var native = cap && cap.isNativePlatform && cap.isNativePlatform() && P;
+    if (native && P.FileSaver) {
+      var b64 = await new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(',')[1]); }; fr.onerror = function(){ rej(fr.error); }; fr.readAsDataURL(blob); });
+      try {
+        await P.FileSaver.save({name: name, base64: b64, mime: mime});
+        showNotice('Telefonun İndirilenler klasörüne kaydedildi: ' + name, true); return;
+      } catch (e) {
+        if (!(P.Filesystem && P.Share)) throw e;
+        var w = await P.Filesystem.writeFile({path: name, data: b64, directory: 'CACHE'});
+        await P.Share.share({title: name, url: w.uri, dialogTitle: 'Dosyayı kaydet veya paylaş'});
+        return;
+      }
+    }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    showNotice('Çıktı hazırlandı: ' + name, true);
+  }
+  $('btnExport').addEventListener('click', async function(){
+    var items = foundRows();
+    if (!items.length) { showNotice('Önce parselleri sorgulayın, çıktı bulunan parsellerden alınır.'); return; }
+    var btn = $('btnExport'); btn.disabled = true;
+    var title = $('outTitle').value.trim() || 'Parsel Haritası';
+    var d = new Date(), z2 = function(n){ return String(n).padStart(2, '0'); };
+    var stamp = d.getFullYear() + z2(d.getMonth() + 1) + z2(d.getDate()) + '-' + z2(d.getHours()) + z2(d.getMinutes());
+    var res = null;
+    try {
+      showNotice('Harita hazırlanıyor…', true);
+      res = await renderMapImage({title: title, base: $('base').value, maxSide: parseInt($('outQ').value, 10) || 5000,
+        onProgress: function(pc){ showNotice('Harita karoları indiriliyor… %' + pc, true); }});
+      if (res.failed === res.total) showNotice('Altlık harita indirilemedi, çıktı yalnızca parsellerle hazırlanıyor.', false);
+      showNotice('Dosya hazırlanıyor…', true);
+      if ($('outFmt').value === 'jpg') {
+        var blob = await new Promise(function(r){ res.canvas.toBlob(r, 'image/jpeg', 0.9); });
+        if (!blob) throw new Error('Görüntü oluşturulamadı, kaliteyi düşürün');
+        await saveBlob('parsel-haritasi-' + stamp + '.jpg', blob, 'image/jpeg');
+      } else {
+        await loadJsPdf();
+        var JS = window.jspdf.jsPDF, cw = res.canvas.width, ch = res.canvas.height, long = 420;
+        var pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
+        var doc = new JS({orientation: cw >= ch ? 'landscape' : 'portrait', unit: 'mm', format: [pw, ph], compress: true});
+        doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
+        renderTablePages(items, title).forEach(function(c){
+          doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        });
+        await saveBlob('parsel-haritasi-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');
+      }
+      if (res.failed && res.failed < res.total) showNotice('Çıktı kaydedildi, ancak ' + res.failed + ' harita karosu indirilemedi (boş kalmış olabilir). Gerekirse yeniden alın.', false);
+    } catch (e) {
+      showNotice('Çıktı alınamadı: ' + (e && e.message ? e.message : e) + '. Kaliteyi düşürmeyi deneyin.');
+    } finally {
+      if (res && res.canvas) { res.canvas.width = 0; res.canvas.height = 0; }
+      btn.disabled = false;
+    }
+  });
 
   /* ---------- otomatik kayıt ---------- */
   var ROWS_KEY = 'parsel-harita-rows-v1', rowsTimer = null, saveWarned = false;

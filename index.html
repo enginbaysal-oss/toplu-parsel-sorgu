@@ -177,6 +177,10 @@ details[open] summary{margin-bottom:10px}
 
 .navbox{position:absolute;top:12px;right:max(12px,env(safe-area-inset-right,0px));z-index:500;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(330px,calc(100% - 76px))}
 .navbox button{box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.pcs{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.pcs button{width:32px;height:32px;padding:0;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px #8a979c;cursor:pointer}
+.pcs button.rst{width:auto;padding:0 9px;font:500 12px var(--font-body);background:#eef2f3;color:#15262d;border:1px solid #8a979c;box-shadow:none}
+.pcs input[type=color]{width:34px;height:32px;padding:1px;border:1px solid #8a979c;border-radius:5px;background:#fff;cursor:pointer}
 .navtop{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .mapwrap.full{position:fixed;inset:0;z-index:2000;height:auto;min-height:0;border:0}
 .mapwrap.full .navbox{top:calc(12px + env(safe-area-inset-top,0px))}
@@ -688,11 +692,31 @@ function ocrToList(text){
         '<a href="https://yandex.com.tr/harita/?rtext=~' + q + '&rtt=auto" target="_blank" rel="noopener">Yandex</a> · ' +
         '<a href="https://maps.apple.com/?daddr=' + q + '" target="_blank" rel="noopener">Apple</a></div>';
     }
+    var cols = ['#e0301e','#f08a00','#f2d600','#1fa34a','#12b5cb','#2c5fe0','#8a3ffc','#ffffff','#000000'];
+    out += '<div style="margin-top:10px">Parsel rengi:</div><div class="pcs">' +
+      cols.map(function(c){ return '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="Renk ' + c + '"></button>'; }).join('') +
+      '<input type="color" value="' + (r.color || $('hatchColor').value) + '" aria-label="Özel renk">' +
+      '<button type="button" class="rst" data-c="">Varsayılan</button></div>';
     return out;
   }
+  var popupRow = null;
   function showPopup(r, latlng){
+    popupRow = r;
     L.popup({maxWidth: 300}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
   }
+  map.on('popupopen', function(ev){
+    var el = ev.popup.getElement(), r = popupRow;
+    if (!el || !r) return;
+    var box = el.querySelector('.pcs'); if (!box) return;
+    function go(col){ r.color = col; if (r.layer) r.layer.setStyle(polyStyle(r)); renderTable(); }
+    box.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if (!b) return;
+      go(b.dataset.c || null);
+      var ci = box.querySelector('input'); if (ci && b.dataset.c) ci.value = b.dataset.c;
+    });
+    var ci = box.querySelector('input');
+    if (ci) ci.addEventListener('input', function(){ go(ci.value); });
+  });
   function applyLabel(r){
     if (!r.layer) return;
     var on = $('showLabels').checked;

@@ -786,6 +786,7 @@ function ocrToList(text){
     $('selInfo').textContent = tg.length ? 'Renk uygulanacak parsel: ' + tg.length + (rows.some(function(r){ return r.checked; }) ? ' (işaretli)' : ' (tabloda seçili satır)') : 'Renk vermek için tabloda parselleri işaretleyin.';
     document.querySelectorAll('.colorbox button, #selColor').forEach(function(b){ b.disabled = !tg.length; });
     $('legendText').textContent = found ? cnt.bulundu + ' parsel' : 'Sorgulanan parsel';
+    saveRowsSoon();
   }
   function selectRow(r, zoom){
     selected = r; renderTable(); updateNav();
@@ -945,7 +946,19 @@ function ocrToList(text){
   });
 
   /* ---------- dışa aktarma ---------- */
-  function download(name, text, mime){
+  async function download(name, text, mime){
+    var cap = window.Capacitor, P = cap && cap.Plugins;
+    if (cap && cap.isNativePlatform && cap.isNativePlatform() && P && P.Filesystem && P.Share) {
+      try {
+        var w = await P.Filesystem.writeFile({path: name, data: text, directory: 'CACHE', encoding: 'utf8'});
+        await P.Share.share({title: name, text: name, url: w.uri, dialogTitle: 'Dosyayı kaydet veya paylaş'});
+      } catch (e) {
+        if (e && /cancel/i.test(String(e.message || e))) return;
+        try { await navigator.clipboard.writeText(text); showNotice('Dosya paylaşılamadı, içerik panoya kopyalandı. Bir nota yapıştırıp saklayabilirsiniz.', true); }
+        catch (x) { showNotice('Dosya kaydedilemedi: ' + ((e && e.message) || e)); }
+      }
+      return;
+    }
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], {type: mime}));
     a.download = name; document.body.appendChild(a); a.click();
@@ -1140,6 +1153,36 @@ function ocrToList(text){
   $('btnLoc').addEventListener('click', function(){ if (me.id != null) stopGeo(); else startGeo(); });
   map.on('dragstart', function(){ $('follow').checked = false; });
 
+  /* ---------- otomatik kayıt ---------- */
+  var ROWS_KEY = 'parsel-harita-rows-v1', rowsTimer = null, saveWarned = false;
+  function saveRows(){
+    try {
+      var slim = rows.map(function(r){
+        return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null};
+      });
+      localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
+    } catch (e) {
+      if (!saveWarned) { saveWarned = true; showNotice('Çalışma otomatik kaydedilemedi (yer yetersiz olabilir). Sonuçları dışa aktarın.'); }
+    }
+  }
+  function saveRowsSoon(){ clearTimeout(rowsTimer); rowsTimer = setTimeout(saveRows, 700); }
+  function restoreRows(){
+    try {
+      var s = JSON.parse(localStorage.getItem(ROWS_KEY) || 'null');
+      if (!s || !s.length) return;
+      s.forEach(function(o){
+        var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
+        var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
+          status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null};
+        rows.push(r);
+        if (r.feature) drawRow(r);
+      });
+      fitAll();
+    } catch (e) {}
+  }
+
   /* ---------- ayarlar ---------- */
   function save(){
     try {
@@ -1177,6 +1220,7 @@ function ocrToList(text){
   if (!$('apiBase').value.trim()) $('apiBase').value = API_DEFAULT;
   setBase($('base').value);
   buildPattern();
+  restoreRows();
   renderTable();
 })();
 </script>

@@ -170,6 +170,15 @@ details[open] summary{margin-bottom:10px}
 .leaflet-popup-content td{border:0;padding:1px 10px 1px 0}
 .leaflet-popup-content td:first-child{color:#586a72}
 
+.navbox{position:absolute;top:12px;right:max(12px,env(safe-area-inset-right,0px));z-index:500;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(330px,calc(100% - 76px))}
+.navbox button{box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.navcard{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px 10px;font-size:12.5px;box-shadow:0 1px 6px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:5px;width:100%}
+.navcard .big{font:600 15px/1.2 var(--font-head)}
+.navcard .in{color:var(--good)}
+.navcard .warn{color:var(--warn)}
+.navcard .err{color:var(--crit)}
+.navcard .mut{color:var(--muted)}
+.me-dot{width:18px;height:18px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 1px 6px rgba(0,0,0,.4)}
 @media (max-width:860px){
   html,body{height:auto}
   .app{grid-template-columns:minmax(0,1fr);height:auto}
@@ -284,6 +293,13 @@ details[open] summary{margin-bottom:10px}
 
   <main class="mapwrap">
     <div id="map" aria-label="Parsel haritası"></div>
+    <div class="navbox">
+      <button class="primary" id="btnLoc" type="button">Konumumu göster</button>
+      <div class="navcard" id="navCard" hidden>
+        <div id="navLines"></div>
+        <label class="check"><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
+      </div>
+    </div>
     <div class="legend" id="legend"><svg width="26" height="16" aria-hidden="true"><defs><pattern id="lgPat" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#e0301e" stroke-width="1.6"/></pattern></defs><rect x=".75" y=".75" width="24.5" height="14.5" fill="url(#lgPat)" stroke="#e0301e" stroke-width="1.5"/></svg><span id="legendText">Sorgulanan parsel</span></div>
   </main>
 </div>
@@ -390,6 +406,53 @@ function matchName(list, name, isMah){
   throw new Error('"' + name + '" bulunamadı');
 }
 function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]; return c; }
+function ringsOf(g){
+  if (!g) return [];
+  if (g.type === 'Polygon') return [g.coordinates];
+  if (g.type === 'MultiPolygon') return g.coordinates;
+  return [];
+}
+function inRing(ring, x, y){
+  var c = false;
+  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) c = !c;
+  }
+  return c;
+}
+function inGeom(g, x, y){
+  return ringsOf(g).some(function(poly){
+    if (!inRing(poly[0], x, y)) return false;
+    for (var k = 1; k < poly.length; k++) if (inRing(poly[k], x, y)) return false;
+    return true;
+  });
+}
+function distM(g, x, y){
+  var kx = 111320 * Math.cos(y * Math.PI / 180), ky = 110540, best = Infinity;
+  ringsOf(g).forEach(function(poly){ poly.forEach(function(ring){
+    for (var i = 0; i < ring.length - 1; i++) {
+      var ax = (ring[i][0] - x) * kx, ay = (ring[i][1] - y) * ky, bx = (ring[i + 1][0] - x) * kx, by = (ring[i + 1][1] - y) * ky;
+      var dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+      var t = l ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l)) : 0;
+      var px = ax + t * dx, py = ay + t * dy, d = Math.sqrt(px * px + py * py);
+      if (d < best) best = d;
+    }
+  }); });
+  return best;
+}
+function centroidOf(g){
+  var poly = ringsOf(g)[0]; if (!poly) return null;
+  var r = poly[0], n = r.length > 1 ? r.length - 1 : r.length, sx = 0, sy = 0;
+  for (var i = 0; i < n; i++) { sx += r[i][0]; sy += r[i][1]; }
+  return [sx / n, sy / n];
+}
+function bearingDeg(x1, y1, x2, y2){
+  var R = Math.PI / 180, p1 = y1 * R, p2 = y2 * R, dl = (x2 - x1) * R;
+  var yy = Math.sin(dl) * Math.cos(p2), xx = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(yy, xx) / R + 360) % 360;
+}
+function dirName(b){ return ['kuzey','kuzeydoğu','doğu','güneydoğu','güney','güneybatı','batı','kuzeybatı'][Math.round(b / 45) % 8]; }
+function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1).replace('.', ',') + ' km'; }
 /*PURE-END*/
 
 (function(){
@@ -570,7 +633,15 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     add('Nitelik', prop(p, ['nitelik']));
     add('Mevkii', prop(p, ['mevkii']));
     add('Pafta', prop(p, ['pafta', 'paftaNo']));
-    return '<b>' + esc(r.ada) + ' ada, ' + esc(r.parsel) + ' parsel</b><table>' + rowsHtml + '</table>';
+    var out = '<b>' + esc(r.ada) + ' ada, ' + esc(r.parsel) + ' parsel</b><table>' + rowsHtml + '</table>';
+    var cen = r.feature && centroidOf(r.feature.geometry);
+    if (cen) {
+      var q = cen[1].toFixed(6) + ',' + cen[0].toFixed(6);
+      out += '<div style="margin-top:8px">Yol tarifi: <a href="https://www.google.com/maps/dir/?api=1&destination=' + q + '&travelmode=driving" target="_blank" rel="noopener">Google</a> · ' +
+        '<a href="https://yandex.com.tr/harita/?rtext=~' + q + '&rtt=auto" target="_blank" rel="noopener">Yandex</a> · ' +
+        '<a href="https://maps.apple.com/?daddr=' + q + '" target="_blank" rel="noopener">Apple</a></div>';
+    }
+    return out;
   }
   function showPopup(r, latlng){
     L.popup({maxWidth: 300}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
@@ -638,7 +709,7 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     $('legendText').textContent = found ? cnt.bulundu + ' parsel' : 'Sorgulanan parsel';
   }
   function selectRow(r, zoom){
-    selected = r; renderTable();
+    selected = r; renderTable(); updateNav();
     if (zoom && r.layer) {
       map.fitBounds(r.layer.getBounds(), {maxZoom: 19, padding: [50, 50]});
       showPopup(r, r.layer.getBounds().getCenter());
@@ -791,6 +862,81 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     };
     fr.readAsText(file); e.target.value = '';
   });
+
+  /* ---------- konum ---------- */
+  var me = {id: null, pos: null, marker: null, circle: null, line: null, fitted: false};
+  var navLinesEl = $('navLines');
+  function setNav(html){ navLinesEl.innerHTML = html; }
+  function updateNav(){
+    if (!me.pos) return;
+    var x = me.pos.lng, y = me.pos.lat, acc = me.pos.acc, html = '';
+    html += '<div class="mut">Konum doğruluğu ±' + Math.round(acc) + ' m' + (acc > 25 ? ' <span class="warn">(düşük, açık alana çıkın)</span>' : '') + '</div>';
+    var found = rows.filter(function(r){ return r.feature; });
+    var inside = found.filter(function(r){ return inGeom(r.feature.geometry, x, y); });
+    if (inside.length) {
+      html = '<div class="big in">İçindesiniz: ' + esc(inside[0].ada) + '/' + esc(inside[0].parsel) + '</div>' + html;
+    } else if (found.length) {
+      var best = null, bd = Infinity;
+      found.forEach(function(r){ var d = distM(r.feature.geometry, x, y); if (d < bd) { bd = d; best = r; } });
+      var c = centroidOf(best.feature.geometry);
+      var dir = c ? ' ' + dirName(bearingDeg(x, y, c[0], c[1])) + ' yönünde' : '';
+      html = '<div class="big">Hiçbir parselin içinde değilsiniz</div><div>En yakın: <b>' + esc(best.ada) + '/' + esc(best.parsel) + '</b>, ' + fmtDist(bd) + dir + '</div>' + html;
+    } else {
+      html = '<div class="big">Haritada parsel yok</div>' + html;
+    }
+    var sel = selected && selected.feature ? selected : null;
+    if (me.line) { map.removeLayer(me.line); me.line = null; }
+    if (sel) {
+      var inSel = inGeom(sel.feature.geometry, x, y);
+      if (inSel) html += '<div class="in">Seçili parseldesiniz: ' + esc(sel.ada) + '/' + esc(sel.parsel) + '</div>';
+      else {
+        var cs = centroidOf(sel.feature.geometry), ds = distM(sel.feature.geometry, x, y);
+        html += '<div>Seçili <b>' + esc(sel.ada) + '/' + esc(sel.parsel) + '</b>: ' + fmtDist(ds) + (cs ? ' ' + dirName(bearingDeg(x, y, cs[0], cs[1])) + ' yönünde' : '') + '</div>';
+        if (cs) me.line = L.polyline([[y, x], [cs[1], cs[0]]], {color: '#1a73e8', weight: 3, dashArray: '6 6', interactive: false}).addTo(map);
+      }
+    }
+    setNav(html);
+  }
+  function onPos(p){
+    var ll = [p.coords.latitude, p.coords.longitude];
+    me.pos = {lat: ll[0], lng: ll[1], acc: p.coords.accuracy || 0};
+    if (!me.marker) {
+      me.circle = L.circle(ll, {radius: me.pos.acc, color: '#1a73e8', weight: 1, fillColor: '#1a73e8', fillOpacity: 0.12, interactive: false}).addTo(map);
+      me.marker = L.marker(ll, {icon: L.divIcon({className: '', html: '<div class="me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9]}), interactive: false, keyboard: false, zIndexOffset: 1000}).addTo(map);
+    } else { me.marker.setLatLng(ll); me.circle.setLatLng(ll).setRadius(me.pos.acc); }
+    if (!me.fitted) {
+      me.fitted = true;
+      var b = group.getLayers().length ? group.getBounds().extend(ll) : null;
+      if (b) map.fitBounds(b, {padding: [50, 50], maxZoom: 19}); else map.setView(ll, 18);
+    } else if ($('follow').checked) map.panTo(ll);
+    updateNav();
+  }
+  function onPosErr(e){
+    var msg = e.code === 1 ? 'Konum izni verilmedi. Tarayıcı ayarlarından bu sayfaya konum izni verin.'
+      : e.code === 2 ? 'Konum alınamadı. GPS veya konum servisini açın.'
+      : e.code === 3 ? 'Konum zaman aşımına uğradı. Açık alanda yeniden deneyin.' : 'Konum hatası.';
+    if (!window.isSecureContext) msg += ' Konum için sayfanın https adresinden (örneğin GitHub Pages) açılması gerekir.';
+    setNav('<div class="err">' + esc(msg) + '</div>');
+    if (e.code === 1) stopGeo(true);
+  }
+  function startGeo(){
+    $('navCard').hidden = false;
+    if (!navigator.geolocation) { setNav('<div class="err">Bu tarayıcı konum özelliğini desteklemiyor.</div>'); return; }
+    setNav('<div class="mut">Konum aranıyor…</div>');
+    me.fitted = false;
+    me.id = navigator.geolocation.watchPosition(onPos, onPosErr, {enableHighAccuracy: true, maximumAge: 2000, timeout: 20000});
+    $('btnLoc').textContent = 'Konumu kapat';
+  }
+  function stopGeo(keepCard){
+    if (me.id != null) navigator.geolocation.clearWatch(me.id);
+    me.id = null; me.pos = null;
+    [me.marker, me.circle, me.line].forEach(function(l){ if (l) map.removeLayer(l); });
+    me.marker = me.circle = me.line = null;
+    if (!keepCard) $('navCard').hidden = true;
+    $('btnLoc').textContent = 'Konumumu göster';
+  }
+  $('btnLoc').addEventListener('click', function(){ if (me.id != null) stopGeo(); else startGeo(); });
+  map.on('dragstart', function(){ $('follow').checked = false; });
 
   /* ---------- ayarlar ---------- */
   function save(){

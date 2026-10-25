@@ -181,6 +181,9 @@ details[open] summary{margin-bottom:10px}
 .pcs button{width:32px;height:32px;padding:0;border-radius:5px;border:2px solid #fff;box-shadow:0 0 0 1px #8a979c;cursor:pointer}
 .pcs button.rst{width:auto;padding:0 9px;font:500 12px var(--font-body);background:#eef2f3;color:#15262d;border:1px solid #8a979c;box-shadow:none}
 .pcs input[type=color]{width:34px;height:32px;padding:1px;border:1px solid #8a979c;border-radius:5px;background:#fff;cursor:pointer}
+.leaflet-popup-close-button{display:none}
+.mapwrap.popup-open .navbox,.mapwrap.popup-open .legend{display:none}
+.pclose{display:block;width:100%;margin-top:10px;padding:11px 12px;font:600 14px var(--font-body);border-radius:5px;border:1px solid #8a979c;background:#eef2f3;color:#15262d;cursor:pointer}
 .navtop{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .mapwrap.full{position:fixed;inset:0;z-index:2000;height:auto;min-height:0;border:0}
 .mapwrap.full .navbox{top:calc(12px + env(safe-area-inset-top,0px))}
@@ -696,17 +699,21 @@ function ocrToList(text){
     out += '<div style="margin-top:10px">Parsel rengi:</div><div class="pcs">' +
       cols.map(function(c){ return '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="Renk ' + c + '"></button>'; }).join('') +
       '<input type="color" value="' + (r.color || $('hatchColor').value) + '" aria-label="Özel renk">' +
-      '<button type="button" class="rst" data-c="">Varsayılan</button></div>';
+      '<button type="button" class="rst" data-c="">Varsayılan</button></div>' +
+      '<button type="button" class="pclose">Kapat</button>';
     return out;
   }
   var popupRow = null;
   function showPopup(r, latlng){
     popupRow = r;
-    L.popup({maxWidth: 300}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
+    L.popup({maxWidth: 300, autoPanPadding: [16, 16]}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
   }
   map.on('popupopen', function(ev){
     var el = ev.popup.getElement(), r = popupRow;
+    $('mapwrap').classList.add('popup-open');
     if (!el || !r) return;
+    var cb = el.querySelector('.pclose');
+    if (cb) cb.addEventListener('click', function(){ map.closePopup(); });
     var box = el.querySelector('.pcs'); if (!box) return;
     function go(col){ r.color = col; if (r.layer) r.layer.setStyle(polyStyle(r)); renderTable(); }
     box.addEventListener('click', function(e){
@@ -717,6 +724,7 @@ function ocrToList(text){
     var ci = box.querySelector('input');
     if (ci) ci.addEventListener('input', function(){ go(ci.value); });
   });
+  map.on('popupclose', function(){ $('mapwrap').classList.remove('popup-open'); });
   function applyLabel(r){
     if (!r.layer) return;
     var on = $('showLabels').checked;

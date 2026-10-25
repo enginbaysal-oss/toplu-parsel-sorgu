@@ -132,6 +132,14 @@ th{position:sticky;top:0;background:var(--panel-2);font-weight:600;font-size:11p
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 td.mono{font-family:var(--font-mono);white-space:nowrap}
 tbody tr{cursor:pointer}
+th:first-child,td:first-child{width:28px;padding-right:0}
+td input.chk,th input{width:15px;height:15px;accent-color:var(--accent);margin:0;cursor:pointer}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;vertical-align:baseline;margin-left:4px;border:1px solid var(--line)}
+.colorbox{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:4px;background:var(--panel-2)}
+.colorbox .info{font-size:12.5px;color:var(--muted)}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.swatches button.s{width:28px;height:28px;padding:0;border-radius:4px;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line)}
+.swatches button.s:hover:not(:disabled){box-shadow:0 0 0 2px var(--accent)}
 tbody tr:hover{background:var(--panel-2)}
 tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--accent)}
 td .why{display:block;color:var(--muted);font-size:11.5px;margin-top:2px;max-width:34ch;overflow-wrap:anywhere}
@@ -226,10 +234,29 @@ details[open] summary{margin-bottom:10px}
       <div class="sec-h"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th></tr></thead>
+          <thead><tr><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
+      </div>
+      <div class="colorbox">
+        <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
+        <div class="swatches" id="swatches">
+          <button class="s" type="button" data-c="#e0301e" style="background:#e0301e" aria-label="Kırmızı"></button>
+          <button class="s" type="button" data-c="#f08a00" style="background:#f08a00" aria-label="Turuncu"></button>
+          <button class="s" type="button" data-c="#f2d600" style="background:#f2d600" aria-label="Sarı"></button>
+          <button class="s" type="button" data-c="#1fa34a" style="background:#1fa34a" aria-label="Yeşil"></button>
+          <button class="s" type="button" data-c="#12b5cb" style="background:#12b5cb" aria-label="Turkuaz"></button>
+          <button class="s" type="button" data-c="#2c5fe0" style="background:#2c5fe0" aria-label="Mavi"></button>
+          <button class="s" type="button" data-c="#8a3ffc" style="background:#8a3ffc" aria-label="Mor"></button>
+          <button class="s" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="Beyaz"></button>
+          <button class="s" type="button" data-c="#000000" style="background:#000000" aria-label="Siyah"></button>
+          <input type="color" id="selColor" value="#e0301e" aria-label="Özel renk seç">
+        </div>
+        <div class="row">
+          <button id="btnApplyColor" type="button">Seçiliye uygula</button>
+          <button class="ghost" id="btnResetColor" type="button">Varsayılan renge dön</button>
+        </div>
       </div>
       <div class="row">
         <button id="btnRetry" type="button" disabled>Hatalıları yeniden dene</button>
@@ -397,36 +424,45 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
   function syncLabelZoom(){ mapEl.classList.toggle('hide-labels', map.getZoom() < 15); }
   map.on('zoomend', syncLabelZoom); syncLabelZoom();
 
-  function buildPattern(){
-    var c = $('hatchColor').value, s = $('hatchStyle').value;
+  function hexOf(c){ return String(c).replace('#', ''); }
+  function patSvg(c){
+    var s = $('hatchStyle').value, id = 'ph' + hexOf(c);
     var lines = {
       capraz: '<line x1="0" y1="0" x2="0" y2="9" stroke="' + c + '" stroke-width="2"/>',
       cift: '<line x1="0" y1="0" x2="0" y2="10" stroke="' + c + '" stroke-width="1.6"/><line x1="0" y1="0" x2="10" y2="0" stroke="' + c + '" stroke-width="1.6"/>',
       yatay: '<line x1="0" y1="0" x2="9" y2="0" stroke="' + c + '" stroke-width="2"/>'
     };
     var size = s === 'cift' ? 10 : 9, rot = s === 'yatay' ? 0 : 45;
-    defs.innerHTML = '<pattern id="parselHatch" patternUnits="userSpaceOnUse" width="' + size + '" height="' + size + '" patternTransform="rotate(' + rot + ')">' +
+    return '<pattern id="' + id + '" patternUnits="userSpaceOnUse" width="' + size + '" height="' + size + '" patternTransform="rotate(' + rot + ')">' +
       '<rect width="' + size + '" height="' + size + '" fill="' + c + '" fill-opacity="0.12"/>' + (lines[s] || '') + '</pattern>';
-    var lg = $('lgPat');
-    if (lg) {
-      lg.setAttribute('patternTransform', 'rotate(' + rot + ')');
-      lg.innerHTML = s === 'yatay' ? '<line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.6"/>'
-        : s === 'cift' ? '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.4"/><line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.4"/>'
-        : '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.6"/>';
-      var r = $('legend').querySelector('rect');
-      r.setAttribute('stroke', c);
-      r.setAttribute('fill', s === 'dolgu' ? c : 'url(#lgPat)');
-      r.setAttribute('fill-opacity', s === 'dolgu' ? '0.35' : '1');
-    }
   }
-  function polyStyle(){
-    var c = $('hatchColor').value, solid = $('hatchStyle').value === 'dolgu';
+  function ensurePattern(c){
+    var id = 'ph' + hexOf(c);
+    if (!defs.querySelector('#' + id)) defs.insertAdjacentHTML('beforeend', patSvg(c));
+    return id;
+  }
+  function buildLegend(){
+    var c = $('hatchColor').value, s = $('hatchStyle').value, rot = s === 'yatay' ? 0 : 45;
+    var lg = $('lgPat'); if (!lg) return;
+    lg.setAttribute('patternTransform', 'rotate(' + rot + ')');
+    lg.innerHTML = s === 'yatay' ? '<line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.6"/>'
+      : s === 'cift' ? '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.4"/><line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.4"/>'
+      : '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.6"/>';
+    var r = $('legend').querySelector('rect');
+    r.setAttribute('stroke', c);
+    r.setAttribute('fill', s === 'dolgu' ? c : 'url(#lgPat)');
+    r.setAttribute('fill-opacity', s === 'dolgu' ? '0.35' : '1');
+  }
+  function buildPattern(){ defs.innerHTML = ''; ensurePattern($('hatchColor').value); buildLegend(); }
+  function polyStyle(r){
+    var c = (r && r.color) || $('hatchColor').value, solid = $('hatchStyle').value === 'dolgu';
+    var id = ensurePattern(c);
     return {color: c, weight: 2.5, opacity: 1, lineJoin: 'round',
-      fillColor: solid ? c : 'url(#parselHatch)', fillOpacity: solid ? 0.35 : 1};
+      fillColor: solid ? c : 'url(#' + id + ')', fillOpacity: solid ? 0.35 : 1};
   }
   function restyle(){
     buildPattern();
-    group.eachLayer(function(g){ g.setStyle(polyStyle()); });
+    (rows || []).forEach(function(r){ if (r.layer) r.layer.setStyle(polyStyle(r)); });
   }
 
   /* ---------- durum ---------- */
@@ -549,7 +585,7 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
   }
   function drawRow(r){
     if (r.layer) { group.removeLayer(r.layer); r.layer = null; }
-    var layer = L.geoJSON(r.feature, {renderer: rend, style: polyStyle});
+    var layer = L.geoJSON(r.feature, {renderer: rend, style: function(){ return polyStyle(r); }});
     layer.eachLayer(function(l){ l.on('click', function(e){ selectRow(r, false); showPopup(r, e.latlng); }); });
     group.addLayer(layer);
     r.layer = layer;
@@ -569,7 +605,8 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     rows.forEach(function(r, i){
       var area = r.props ? fmtArea(prop(r.props, ['alan', 'tapuAlani', 'yuzolcumu'])) : '';
       html += '<tr data-i="' + i + '"' + (r === selected ? ' class="sel"' : '') + '>' +
-        '<td class="mono">' + (i + 1) + '</td>' +
+        '<td><input type="checkbox" class="chk" data-i="' + i + '"' + (r.checked ? ' checked' : '') + (r.feature ? '' : ' disabled') + ' aria-label="Parseli seç"></td>' +
+        '<td class="mono">' + (i + 1) + (r.color ? '<span class="sw" style="background:' + esc(r.color) + '"></span>' : '') + '</td>' +
         '<td>' + esc(r.mah) + '<span class="why">' + esc(r.ilce) + (r.il ? ', ' + esc(r.il) : '') + '</span></td>' +
         '<td class="mono">' + esc(r.ada) + '/' + esc(r.parsel) + '</td>' +
         '<td><span class="chip ' + r.status + '">' + STATUS[r.status] + '</span>' + (r.note ? '<span class="why">' + esc(r.note) + '</span>' : '') + '</td>' +
@@ -592,6 +629,12 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
     $('btnStop').disabled = !running;
+    var nf = rows.filter(function(r){ return r.feature; }).length;
+    $('chkAll').checked = nf > 0 && rows.filter(function(r){ return r.feature && r.checked; }).length === nf;
+    $('chkAll').disabled = nf === 0;
+    var tg = targets();
+    $('selInfo').textContent = tg.length ? 'Renk uygulanacak parsel: ' + tg.length + (rows.some(function(r){ return r.checked; }) ? ' (işaretli)' : ' (tabloda seçili satır)') : 'Renk vermek için tabloda parselleri işaretleyin.';
+    document.querySelectorAll('.colorbox button, #selColor').forEach(function(b){ b.disabled = !tg.length; });
     $('legendText').textContent = found ? cnt.bulundu + ' parsel' : 'Sorgulanan parsel';
   }
   function selectRow(r, zoom){
@@ -603,8 +646,32 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
   }
   $('tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (!tr) return;
-    selectRow(rows[+tr.dataset.i], true);
+    var r = rows[+tr.dataset.i];
+    if (e.target.classList.contains('chk')) { r.checked = e.target.checked; renderTable(); return; }
+    selectRow(r, true);
   });
+  $('chkAll').addEventListener('change', function(){
+    var on = this.checked;
+    rows.forEach(function(r){ r.checked = !!(on && r.feature); });
+    renderTable();
+  });
+  function targets(){
+    var c = rows.filter(function(r){ return r.checked && r.feature; });
+    if (c.length) return c;
+    return selected && selected.feature ? [selected] : [];
+  }
+  function applyColor(col){
+    var t = targets(); if (!t.length) return;
+    t.forEach(function(r){ r.color = col; if (r.layer) r.layer.setStyle(polyStyle(r)); });
+    renderTable();
+  }
+  $('swatches').addEventListener('click', function(e){
+    var b = e.target.closest('button.s'); if (!b) return;
+    $('selColor').value = b.dataset.c; applyColor(b.dataset.c);
+  });
+  $('selColor').addEventListener('input', function(){ applyColor(this.value); });
+  $('btnApplyColor').addEventListener('click', function(){ applyColor($('selColor').value); });
+  $('btnResetColor').addEventListener('click', function(){ applyColor(null); });
   function fitAll(){
     if (group.getLayers().length) map.fitBounds(group.getBounds(), {padding: [40, 40], maxZoom: 19});
   }
@@ -665,7 +732,7 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
   function foundRows(){ return rows.filter(function(r){ return r.feature; }); }
   $('btnGeo').addEventListener('click', function(){
     var fc = {type: 'FeatureCollection', features: foundRows().map(function(r){
-      var p = Object.assign({}, r.props, {girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel});
+      var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel});
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
     })};
     download('parseller.geojson', JSON.stringify(fc), 'application/geo+json');
@@ -681,15 +748,14 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
     return s + '</Polygon>';
   }
   $('btnKml').addEventListener('click', function(){
-    var hex = $('hatchColor').value;
     var pm = foundRows().map(function(r){
       var g = r.feature.geometry, geom = '';
       if (g.type === 'Polygon') geom = polyKml(g.coordinates);
       else if (g.type === 'MultiPolygon') geom = '<MultiGeometry>' + g.coordinates.map(polyKml).join('') + '</MultiGeometry>';
-      return '<Placemark><name>' + esc(r.ada) + '/' + esc(r.parsel) + '</name><description>' + esc(r.mah + ', ' + r.ilce + ', ' + r.il) + '</description><styleUrl>#p</styleUrl>' + geom + '</Placemark>';
+      return '<Placemark><name>' + esc(r.ada) + '/' + esc(r.parsel) + '</name><description>' + esc(r.mah + ', ' + r.ilce + ', ' + r.il) + '</description>'+ '<Style><LineStyle><color>' + kmlColor(r.color || $('hatchColor').value, 'ff') + '</color><width>2.5</width></LineStyle><PolyStyle><color>' + kmlColor(r.color || $('hatchColor').value, '59') + '</color></PolyStyle></Style>' + geom + '</Placemark>';
     }).join('');
     var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Parseller</name>' +
-      '<Style id="p"><LineStyle><color>' + kmlColor(hex, 'ff') + '</color><width>2.5</width></LineStyle><PolyStyle><color>' + kmlColor(hex, '59') + '</color></PolyStyle></Style>' + pm + '</Document></kml>';
+      pm + '</Document></kml>';
     download('parseller.kml', kml, 'application/vnd.google-earth.kml+xml');
   });
   $('btnCsv').addEventListener('click', function(){
@@ -717,7 +783,7 @@ function firstCoord(c){ while (Array.isArray(c) && Array.isArray(c[0])) c = c[0]
           var p = f.properties || {};
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
             ada: String(prop(p, ['adaNo', 'ada', 'girdi_ada']) || '-'), parsel: String(prop(p, ['parselNo', 'parsel', 'girdi_parsel']) || (i + 1)),
-            status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null};
+            status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null};
           rows.push(r); drawRow(r);
         });
         showNotice(''); renderTable(); fitAll();

@@ -207,10 +207,11 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </header>
 
     <section>
-      <div class="sec-h"><h2>Parsel listesi</h2><div class="row"><button id="btnExcel" type="button">Excel / CSV yükle</button><button class="ghost" id="btnSample" type="button">Örnek biçim</button></div></div>
+      <div class="sec-h"><h2>Parsel listesi</h2><div class="row"><button id="btnExcel" type="button">Excel / CSV yükle</button><button id="btnPhoto" type="button">Fotoğraftan yükle</button><button class="ghost" id="btnSample" type="button">Örnek biçim</button></div></div>
+      <input type="file" id="filePhoto" accept="image/*" hidden>
       <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv,.ods,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <textarea id="list" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
-      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>. Excel dosyasını yükleyebilir veya hücreleri kopyalayıp yapıştırabilirsiniz. Ayırıcı sekme, noktalı virgül veya virgül olabilir. Başlık satırı varsa sütunlar adından tanınır, <code>101/12</code> yazımı da kabul edilir.</p>
+      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>. Excel dosyası veya fotoğraf yükleyebilir, hücreleri kopyalayıp yapıştırabilirsiniz. Ayırıcı sekme, noktalı virgül veya virgül olabilir. Başlık satırı varsa sütunlar adından tanınır, <code>101/12</code> yazımı da kabul edilir.</p>
       <div class="row">
         <label class="f grow">Varsayılan il<input type="text" id="defIl" placeholder="Listede il yoksa"></label>
         <label class="f grow">Varsayılan ilçe<input type="text" id="defIlce" placeholder="Listede ilçe yoksa"></label>
@@ -471,6 +472,29 @@ function bearingDeg(x1, y1, x2, y2){
 }
 function dirName(b){ return ['kuzey','kuzeydoğu','doğu','güneydoğu','güney','güneybatı','batı','kuzeybatı'][Math.round(b / 45) % 8]; }
 function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1).replace('.', ',') + ' km'; }
+function ocrToList(text){
+  var out = [], lastMah = '', skipped = 0;
+  String(text || '').split(/\r?\n/).forEach(function(raw){
+    var l = raw.replace(/[|¦_]+/g, ' ').replace(/\s+$/,'').replace(/^\s+/,'');
+    if (!l) return;
+    var parts = l.split(/\s{2,}|\t/).map(function(s){ return s.trim(); }).filter(Boolean);
+    if (parts.length === 5 && /^\d+$/.test(parts[3]) && /^\d+$/.test(parts[4])) { out.push(parts.join('\t')); lastMah = parts[2]; return; }
+    var ada = '', parsel = '', idx = -1, m;
+    if ((m = /(\d+)\s*ada\W+(\d+)\s*parsel/i.exec(l))) { ada = m[1]; parsel = m[2]; idx = m.index; }
+    else if ((m = /(\d+)\s*[\/\-.]\s*(\d+)\s*$/.exec(l))) { ada = m[1]; parsel = m[2]; idx = m.index; }
+    else if ((m = /(\d+)\s+(\d+)\s*$/.exec(l))) { ada = m[1]; parsel = m[2]; idx = m.index; }
+    else {
+      var head = l.replace(/\b(mahallesi|mahalle|mah)\b\.?/gi, ' ').replace(/[,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (head && !/\d/.test(head) && head.split(' ').length <= 4) lastMah = head; else skipped++;
+      return;
+    }
+    var rest = l.slice(0, idx).replace(/\b(mahallesi|mahalle|mah|ada|parsel)\b\.?/gi, ' ').replace(/[,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (rest && !/^\d+$/.test(rest)) lastMah = rest;
+    if (!lastMah) { skipped++; return; }
+    out.push(lastMah + '\t' + ada + '\t' + parsel);
+  });
+  return {lines: out, skipped: skipped};
+}
 /*PURE-END*/
 
 (function(){
@@ -831,6 +855,52 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
     };
     fr.onerror = function(){ showNotice('Dosya okunamadı.'); input.value = ''; };
     fr.readAsArrayBuffer(f);
+  });
+  function loadTess(){
+    return new Promise(function(res, rej){
+      if (window.Tesseract) return res();
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js';
+      s.onload = res;
+      s.onerror = function(){ rej(new Error('Yazı tanıma kütüphanesi yüklenemedi. İnternet bağlantısını kontrol edin.')); };
+      document.head.appendChild(s);
+    });
+  }
+  async function photoToCanvas(file){
+    var bmp = await createImageBitmap(file);
+    var sc = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+    var cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * sc); cv.height = Math.round(bmp.height * sc);
+    var cx = cv.getContext('2d');
+    cx.filter = 'grayscale(1) contrast(1.4)';
+    cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+    return cv;
+  }
+  $('btnPhoto').addEventListener('click', function(){ $('filePhoto').click(); });
+  $('filePhoto').addEventListener('change', async function(e){
+    var f = e.target.files[0]; if (!f) return;
+    var input = e.target, worker = null;
+    $('btnPhoto').disabled = true;
+    try {
+      showNotice('Fotoğraf hazırlanıyor…', true);
+      await loadTess();
+      var cv = await photoToCanvas(f);
+      worker = await Tesseract.createWorker('tur', 1, {logger: function(m){
+        if (m.status === 'recognizing text') showNotice('Fotoğraf okunuyor… %' + Math.round(m.progress * 100), true);
+        else showNotice('Yazı tanıma hazırlanıyor… (' + m.status + ')', true);
+      }});
+      var ret = await worker.recognize(cv);
+      var conv = ocrToList(ret.data.text);
+      if (!conv.lines.length) throw new Error('Fotoğrafta ada ve parsel numarası bulunamadı. Daha yakından, düz ve net çekmeyi deneyin.');
+      $('list').value = conv.lines.join('\n'); save();
+      var needDef = conv.lines.some(function(l){ return l.split('\t').length === 3; }) && (!$('defIl').value.trim() || !$('defIlce').value.trim());
+      showNotice(conv.lines.length + ' satır okundu' + (conv.skipped ? ', ' + conv.skipped + ' satır tanınmadı' : '') + '. Listeyi kontrol edip düzeltin' +
+        (needDef ? '; il ve ilçeyi "Varsayılan il/ilçe" alanlarına yazın' : '') + ', sonra Sorgula düğmesine basın.', !needDef);
+    } catch (err) { showNotice('Fotoğraf okunamadı: ' + err.message); }
+    finally {
+      if (worker) { try { await worker.terminate(); } catch (x) {} }
+      $('btnPhoto').disabled = false; input.value = '';
+    }
   });
   $('btnSample').addEventListener('click', function(){
     $('list').value = 'İl\tİlçe\tMahalle\tAda\tParsel\nManisa\tSalihli\tAdnan Menderes\t101\t12\nManisa\tSalihli\tAdnan Menderes\t101\t13\nİzmir\tKarşıyaka\tBostanlı\t1520\t7';

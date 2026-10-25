@@ -127,6 +127,7 @@ button.ghost{background:transparent}
 .chip.sorgulaniyor{background:var(--panel-2);color:var(--accent);outline:1px solid var(--accent)}
 
 .notice{margin:0;padding:9px 11px;border-radius:4px;background:var(--crit-bg);color:var(--crit);font-size:13px;border:1px solid var(--crit)}
+.notice.ok{background:var(--good-bg);color:var(--good);border-color:var(--good)}
 .notice[hidden]{display:none}
 
 .tablewrap{max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:4px;background:var(--panel)}
@@ -206,9 +207,10 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </header>
 
     <section>
-      <div class="sec-h"><h2>Parsel listesi</h2><button class="ghost" id="btnSample" type="button">Örnek biçim</button></div>
+      <div class="sec-h"><h2>Parsel listesi</h2><div class="row"><button id="btnExcel" type="button">Excel / CSV yükle</button><button class="ghost" id="btnSample" type="button">Örnek biçim</button></div></div>
+      <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv,.ods,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <textarea id="list" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
-      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>. Excel'den kopyalayıp yapıştırabilirsiniz. Ayırıcı sekme, noktalı virgül veya virgül olabilir. Başlık satırı varsa sütunlar adından tanınır, <code>101/12</code> yazımı da kabul edilir.</p>
+      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>. Excel dosyasını yükleyebilir veya hücreleri kopyalayıp yapıştırabilirsiniz. Ayırıcı sekme, noktalı virgül veya virgül olabilir. Başlık satırı varsa sütunlar adından tanınır, <code>101/12</code> yazımı da kabul edilir.</p>
       <div class="row">
         <label class="f grow">Varsayılan il<input type="text" id="defIl" placeholder="Listede il yoksa"></label>
         <label class="f grow">Varsayılan ilçe<input type="text" id="defIlce" placeholder="Listede ilçe yoksa"></label>
@@ -313,6 +315,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 'use strict';
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) { window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); }); }
@@ -335,14 +338,16 @@ function parseList(text, defIl, defIlce){
   function split(l){ return l.split(delim).map(function(c){ return c.trim().replace(/^"|"$/g, '').trim(); }); }
   var cols = null, start = 0;
   var h = split(lines[0]).map(norm);
-  if (h.indexOf('ADA') >= 0 || h.indexOf('ADA NO') >= 0) {
-    if (h.indexOf('PARSEL') >= 0 || h.indexOf('PARSEL NO') >= 0) {
+  var hasAP = h.indexOf('ADA PARSEL') >= 0 || h.indexOf('ADA PARSEL NO') >= 0;
+  if (hasAP || h.indexOf('ADA') >= 0 || h.indexOf('ADA NO') >= 0) {
+    if (hasAP || h.indexOf('PARSEL') >= 0 || h.indexOf('PARSEL NO') >= 0) {
       cols = {};
       h.forEach(function(c, i){
         if (c === 'IL' || c === 'IL ADI') cols.il = i;
         else if (c === 'ILCE' || c === 'ILCE ADI') cols.ilce = i;
         else if (/^(MAHALLE|MAH|KOY)/.test(c)) cols.mah = i;
         else if (c === 'ADA' || c === 'ADA NO') cols.ada = i;
+        else if (c === 'ADA PARSEL' || c === 'ADA PARSEL NO') cols.ap = i;
         else if (c === 'PARSEL' || c === 'PARSEL NO') cols.parsel = i;
       });
       start = 1;
@@ -357,6 +362,10 @@ function parseList(text, defIl, defIlce){
         ilce: cols.ilce != null ? c[cols.ilce] : defIlce,
         mah: c[cols.mah], ada: c[cols.ada], parsel: c[cols.parsel]
       };
+      if (cols.ap != null) {
+        var ap = /^(\d+)\s*[\/\-.]\s*(\d+)$/.exec(String(c[cols.ap] || '').trim());
+        row.ada = ap ? ap[1] : ''; row.parsel = ap ? ap[2] : '';
+      }
     } else {
       var last = c[c.length - 1] || '';
       var combo = /^(\d+)\s*\/\s*(\d+)$/.exec(last);
@@ -546,7 +555,7 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
   }
   function base(){ return ($('apiBase').value.trim() || API_DEFAULT).replace(/\/+$/, ''); }
 
-  function showNotice(msg){ var n = $('notice'); n.textContent = msg || ''; n.hidden = !msg; }
+  function showNotice(msg, ok){ var n = $('notice'); n.textContent = msg || ''; n.hidden = !msg; n.classList.toggle('ok', !!ok); }
   function netHint(){
     return 'TKGM servisine bağlanılamadı. İnternet bağlantınızı kontrol edin. Tarayıcı bu adrese izin vermiyorsa Ayarlar bölümünden kendi aracı sunucu adresinizi yazın veya GeoJSON dosyası açın.';
   }
@@ -797,6 +806,32 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
     abort = true; group.clearLayers(); rows = []; selected = null; $('list').value = ''; showNotice(''); save(); renderTable();
   });
   $('btnFit').addEventListener('click', fitAll);
+  $('btnExcel').addEventListener('click', function(){ $('fileExcel').click(); });
+  $('fileExcel').addEventListener('change', function(e){
+    var f = e.target.files[0]; if (!f) return;
+    var input = e.target;
+    if (typeof XLSX === 'undefined') { showNotice('Excel okuyucu yüklenemedi. İnternet bağlantınızı kontrol edip sayfayı yenileyin.'); input.value = ''; return; }
+    var fr = new FileReader();
+    fr.onload = function(){
+      try {
+        var wb = XLSX.read(fr.result, {type: 'array'});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var data = XLSX.utils.sheet_to_json(ws, {header: 1, raw: false, defval: ''});
+        var lines = data.map(function(r){ return r.map(function(c){ return String(c).replace(/[\t\r\n]+/g, ' ').trim(); }); })
+          .filter(function(r){ return r.some(function(c){ return c !== ''; }); })
+          .map(function(r){ return r.join('\t'); });
+        if (!lines.length) throw new Error('Dosyada veri bulunamadı.');
+        $('list').value = lines.join('\n'); save();
+        var parsed = parseList($('list').value, $('defIl').value.trim(), $('defIlce').value.trim());
+        var bad = parsed.filter(function(p){ return p.parseError; }).length;
+        showNotice(f.name + ': ' + parsed.length + ' satır yüklendi' + (wb.SheetNames.length > 1 ? ' (yalnızca ilk sayfa: ' + wb.SheetNames[0] + ')' : '') +
+          (bad ? ', ' + bad + ' satırda eksik veya hatalı bilgi var' : '') + '. Sorgula düğmesine basın.', !bad);
+      } catch (err) { showNotice('Dosya okunamadı: ' + err.message); }
+      input.value = '';
+    };
+    fr.onerror = function(){ showNotice('Dosya okunamadı.'); input.value = ''; };
+    fr.readAsArrayBuffer(f);
+  });
   $('btnSample').addEventListener('click', function(){
     $('list').value = 'İl\tİlçe\tMahalle\tAda\tParsel\nManisa\tSalihli\tAdnan Menderes\t101\t12\nManisa\tSalihli\tAdnan Menderes\t101\t13\nİzmir\tKarşıyaka\tBostanlı\t1520\t7';
     showNotice('Örnek yalnızca biçimi gösterir. Ada ve parsel numaralarını kendi verinizle değiştirin.');

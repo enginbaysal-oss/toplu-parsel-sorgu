@@ -173,6 +173,10 @@ details[open] summary{margin-bottom:10px}
 .navbox{position:absolute;top:12px;right:max(12px,env(safe-area-inset-right,0px));z-index:500;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:min(330px,calc(100% - 76px))}
 .navbox button{box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .navcard{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:8px 10px;font-size:12.5px;box-shadow:0 1px 6px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:5px;width:100%}
+.navacts{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.navacts button,a.btnlink{font:500 13px var(--font-body);padding:7px 11px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-block}
+a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.navcard a{color:var(--accent)}
 .navcard .big{font:600 15px/1.2 var(--font-head)}
 .navcard .in{color:var(--good)}
 .navcard .warn{color:var(--warn)}
@@ -864,11 +868,15 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
   });
 
   /* ---------- konum ---------- */
-  var me = {id: null, pos: null, marker: null, circle: null, line: null, fitted: false};
+  var me = {id: null, pos: null, marker: null, circle: null, line: null, fitted: false, route: null, routeTxt: '', routeFor: null};
   var navLinesEl = $('navLines');
   function setNav(html){ navLinesEl.innerHTML = html; }
   function updateNav(){
     if (!me.pos) return;
+    if (me.routeFor && me.routeFor !== selected) {
+      if (me.route) map.removeLayer(me.route);
+      me.route = null; me.routeTxt = ''; me.routeFor = null;
+    }
     var x = me.pos.lng, y = me.pos.lat, acc = me.pos.acc, html = '';
     html += '<div class="mut">Konum doğruluğu ±' + Math.round(acc) + ' m' + (acc > 25 ? ' <span class="warn">(düşük, açık alana çıkın)</span>' : '') + '</div>';
     var found = rows.filter(function(r){ return r.feature; });
@@ -893,10 +901,41 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
         var cs = centroidOf(sel.feature.geometry), ds = distM(sel.feature.geometry, x, y);
         html += '<div>Seçili <b>' + esc(sel.ada) + '/' + esc(sel.parsel) + '</b>: ' + fmtDist(ds) + (cs ? ' ' + dirName(bearingDeg(x, y, cs[0], cs[1])) + ' yönünde' : '') + '</div>';
         if (cs) me.line = L.polyline([[y, x], [cs[1], cs[0]]], {color: '#1a73e8', weight: 3, dashArray: '6 6', interactive: false}).addTo(map);
+        if (cs) {
+          var q = cs[1].toFixed(6) + ',' + cs[0].toFixed(6);
+          html += '<div class="navacts"><a class="btnlink primary" href="https://www.google.com/maps/dir/?api=1&destination=' + q + '&travelmode=driving" target="_blank" rel="noopener">Navigasyonu başlat</a>' +
+            '<button type="button" data-act="route">Rota çiz</button></div>' +
+            '<div class="mut">Başka uygulama: <a href="https://yandex.com.tr/harita/?rtext=~' + q + '&rtt=auto" target="_blank" rel="noopener">Yandex</a> · <a href="https://maps.apple.com/?daddr=' + q + '" target="_blank" rel="noopener">Apple Haritalar</a></div>' + me.routeTxt;
+        }
       }
+    } else if (!inside.length) {
+      html += '<div class="mut">Gitmek istediğiniz parseli tabloda veya haritada seçin, yönlendirme çıkar.</div>';
     }
     setNav(html);
   }
+  async function drawRoute(){
+    var sel = selected;
+    if (!sel || !sel.feature || !me.pos) return;
+    var c = centroidOf(sel.feature.geometry); if (!c) return;
+    me.routeFor = sel; me.routeTxt = '<div class="mut">Rota hesaplanıyor…</div>'; updateNav();
+    try {
+      var res = await fetch('https://router.project-osrm.org/route/v1/driving/' + me.pos.lng + ',' + me.pos.lat + ';' + c[0] + ',' + c[1] + '?overview=full&geometries=geojson');
+      var j = await res.json();
+      if (!j.routes || !j.routes.length) throw new Error('rota yok');
+      var rt = j.routes[0];
+      if (me.route) map.removeLayer(me.route);
+      me.route = L.geoJSON(rt.geometry, {style: {color: '#1a73e8', weight: 5, opacity: 0.85}, interactive: false}).addTo(map);
+      $('follow').checked = false;
+      map.fitBounds(me.route.getBounds().extend([me.pos.lat, me.pos.lng]), {padding: [60, 60], maxZoom: 18});
+      me.routeTxt = '<div>Araçla: <b>' + fmtDist(rt.distance) + '</b>, yaklaşık ' + Math.max(1, Math.round(rt.duration / 60)) + ' dk</div><div class="mut">Son kısım yürüyerek olabilir. Sesli yönlendirme için Navigasyonu başlat düğmesini kullanın.</div>';
+    } catch (e) {
+      me.routeTxt = '<div class="err">Rota çizilemedi. Navigasyonu başlat düğmesini kullanın.</div>';
+    }
+    updateNav();
+  }
+  navLinesEl.addEventListener('click', function(e){
+    if (e.target.closest('[data-act="route"]')) drawRoute();
+  });
   function onPos(p){
     var ll = [p.coords.latitude, p.coords.longitude];
     me.pos = {lat: ll[0], lng: ll[1], acc: p.coords.accuracy || 0};
@@ -930,8 +969,8 @@ function fmtDist(m){ return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed
   function stopGeo(keepCard){
     if (me.id != null) navigator.geolocation.clearWatch(me.id);
     me.id = null; me.pos = null;
-    [me.marker, me.circle, me.line].forEach(function(l){ if (l) map.removeLayer(l); });
-    me.marker = me.circle = me.line = null;
+    [me.marker, me.circle, me.line, me.route].forEach(function(l){ if (l) map.removeLayer(l); });
+    me.marker = me.circle = me.line = me.route = null; me.routeTxt = ''; me.routeFor = null;
     if (!keepCard) $('navCard').hidden = true;
     $('btnLoc').textContent = 'Konumumu göster';
   }

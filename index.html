@@ -1295,7 +1295,7 @@ function poleOf(g){
     if (minLng > maxLng) throw new Error('Çizilecek parsel yok');
     var padX = Math.max((maxLng - minLng) * 0.12, 0.0002), padY = Math.max((maxLat - minLat) * 0.12, 0.0002);
     minLng -= padX; maxLng += padX; minLat -= padY; maxLat += padY;
-    var z = chooseZoom(minLng, minLat, maxLng, maxLat, 8000, 19, o.maxArea);
+    var z = chooseZoom(minLng, minLat, maxLng, maxLat, 8000, 21, o.maxArea), zt = Math.min(z, 19), sc = Math.pow(2, z - zt);
     var tl = worldPx(minLng, maxLat, z), br = worldPx(maxLng, minLat, z);
     var W = Math.max(1600, Math.ceil(br.x - tl.x)), H = Math.max(1000, Math.ceil(br.y - tl.y));
     var ox = (tl.x + br.x) / 2 - W / 2, oy = (tl.y + br.y) / 2 - H / 2;
@@ -1310,8 +1310,8 @@ function poleOf(g){
     ctx.fillStyle = '#e8ecee'; ctx.fillRect(0, 0, cv.width, cv.height);
 
     // altlık karoları
-    var base = o.base === 'osm' ? 'street' : o.base, n = Math.pow(2, z);
-    var x0 = Math.floor(ox / 256), x1 = Math.floor((ox + W - 1) / 256), y0 = Math.max(0, Math.floor(oy / 256)), y1 = Math.min(n - 1, Math.floor((oy + H - 1) / 256));
+    var base = o.base === 'osm' ? 'street' : o.base, n = Math.pow(2, zt), ts = 256 * sc;
+    var x0 = Math.floor(ox / ts), x1 = Math.floor((ox + W - 1) / ts), y0 = Math.max(0, Math.floor(oy / ts)), y1 = Math.min(n - 1, Math.floor((oy + H - 1) / ts));
     var jobs = [];
     tileTemplates(base).forEach(function(tpl){
       for (var ty = y0; ty <= y1; ty++) for (var tx = x0; tx <= x1; tx++) jobs.push({tpl: tpl, tx: tx, ty: ty});
@@ -1322,8 +1322,8 @@ function poleOf(g){
         var j = jobs.shift(); if (!j) break;
         try {
           var wx = ((j.tx % n) + n) % n;
-          var bmp = await loadTile(j.tpl.replace('{z}', z).replace('{x}', wx).replace('{y}', j.ty));
-          ctx.drawImage(bmp, Math.floor(j.tx * 256 - ox), Math.floor(j.ty * 256 - oy + hH), 257, 257);
+          var bmp = await loadTile(j.tpl.replace('{z}', zt).replace('{x}', wx).replace('{y}', j.ty));
+          ctx.drawImage(bmp, Math.floor(j.tx * ts - ox), Math.floor(j.ty * ts - oy + hH), Math.ceil(ts) + 1, Math.ceil(ts) + 1);
           if (bmp.close) bmp.close();
         } catch (e) { failed++; }
         done++;
@@ -1353,26 +1353,47 @@ function poleOf(g){
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw + 3 * u; ctx.stroke();
       ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
     });
-    // etiketler: parselin içinde, kutusuz, ince beyaz kenarlıklı
+    // etiketler: parselin içinde (sığarsa), sığmazsa çakışmayan boş bir yerde, çizgiyle bağlı
     if (o.labels) {
-      var mppL = 156543.03392 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) / Math.pow(2, z), maxFs = 26 * u, minFs = 18 * u;
+      var mppL = 156543.03392 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180) / Math.pow(2, z), maxFs = 26 * u, minFs = 18 * u, gap = 6 * u;
+      var placed = [], inside = [], outside = [];
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      var hit = function(a){ for (var i = 0; i < placed.length; i++) { var b = placed[i]; if (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y) return true; } return false; };
+      var dims = function(t, fs){ ctx.font = '700 ' + Math.round(fs) + 'px system-ui, Arial, sans-serif'; return {w: ctx.measureText(t).width + fs * 0.5, h: fs * 1.3}; };
+      var drawText = function(t, fs, x, y){
+        ctx.font = '700 ' + Math.round(fs) + 'px system-ui, Arial, sans-serif';
+        ctx.lineWidth = Math.max(3, fs * 0.28); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(t, x, y);
+        ctx.fillStyle = '#111'; ctx.fillText(t, x, y);
+      };
       items.forEach(function(r){
         var pl = poleOf(r.feature.geometry); if (!pl) return;
-        var q = P(pl.lng, pl.lat), t = r.ada + '/' + r.parsel;
-        var natural = 1.8 * (pl.r / mppL) / (0.6 * t.length), fs = Math.min(maxFs, Math.max(minFs, natural)), ly = q[1];
-        ctx.font = '700 ' + Math.round(fs) + 'px system-ui, Arial, sans-serif';
-        if (natural < minFs) {
-          // parsel küçük: etiket okunur boyutta parselin hemen üstüne, ince çizgiyle bağlanır
-          var topY = 1e12;
-          ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){ topY = Math.min(topY, P(c[0], c[1])[1]); }); });
-          ly = Math.max(hH + fs, topY - fs * 1.1 - lw);
-          ctx.beginPath(); ctx.moveTo(q[0], ly + fs * 0.55); ctx.lineTo(q[0], q[1]);
-          ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(4, lw + 2 * u); ctx.stroke();
-          ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1.5, u * 1.6); ctx.stroke();
+        var q = P(pl.lng, pl.lat), t = r.ada + '/' + r.parsel, bb = [1e12, 1e12, -1e12, -1e12];
+        ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){ var s = P(c[0], c[1]); bb[0] = Math.min(bb[0], s[0]); bb[1] = Math.min(bb[1], s[1]); bb[2] = Math.max(bb[2], s[0]); bb[3] = Math.max(bb[3], s[1]); }); });
+        var natural = 1.8 * (pl.r / mppL) / (0.6 * t.length), rec = {q: q, t: t, natural: natural, bb: bb};
+        (natural >= minFs ? inside : outside).push(rec);
+      });
+      inside.forEach(function(rec){
+        var fs = Math.min(maxFs, rec.natural), d = dims(rec.t, fs);
+        placed.push({x: rec.q[0] - d.w / 2, y: rec.q[1] - d.h / 2, w: d.w, h: d.h});
+        drawText(rec.t, fs, rec.q[0], rec.q[1]);
+      });
+      var dirs = [[0, -1], [0, 1], [1, 0], [-1, 0], [1, -1], [-1, -1], [1, 1], [-1, 1]];
+      outside.forEach(function(rec){
+        var fs = minFs, d = dims(rec.t, fs), bw = rec.bb[2] - rec.bb[0], bh = rec.bb[3] - rec.bb[1];
+        var cx = (rec.bb[0] + rec.bb[2]) / 2, cy = (rec.bb[1] + rec.bb[3]) / 2, best = null;
+        search: for (var k = 0; k < 8; k++) for (var di = 0; di < dirs.length; di++) {
+          var g = gap + k * d.h * 0.9, ux = dirs[di][0], uy = dirs[di][1];
+          var x = cx + ux * (bw / 2 + d.w / 2 + (ux ? g : 0)), y = cy + uy * (bh / 2 + d.h / 2 + (uy ? g : 0));
+          var rect = {x: x - d.w / 2, y: y - d.h / 2, w: d.w, h: d.h};
+          if (rect.x < 0 || rect.x + rect.w > W || rect.y < hH || rect.y + rect.h > hH + H) continue;
+          if (!hit(rect)) { best = {x: x, y: y, rect: rect}; break search; }
         }
-        ctx.lineWidth = Math.max(3, fs * 0.28); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(t, q[0], ly);
-        ctx.fillStyle = '#111'; ctx.fillText(t, q[0], ly);
+        if (!best) { var yy = Math.max(hH + d.h, cy - bh / 2 - d.h); best = {x: cx, y: yy, rect: {x: cx - d.w / 2, y: yy - d.h / 2, w: d.w, h: d.h}}; }
+        placed.push(best.rect);
+        ctx.beginPath(); ctx.moveTo(best.x, best.y); ctx.lineTo(rec.q[0], rec.q[1]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(4, lw + 2 * u); ctx.stroke();
+        ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1.5, u * 1.6); ctx.stroke();
+        drawText(rec.t, fs, best.x, best.y);
       });
     }
     // ölçek çubuğu

@@ -349,7 +349,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <div class="navcard compact" id="navCard" hidden>
         <div id="navLines"></div>
         <label class="check" id="followWrap" hidden><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
-        <div class="row"><button type="button" id="btnLocMore">Ayrıntı</button><button type="button" id="btnLocClose">Konumu kapat</button></div>
+        <div class="row"><button type="button" id="btnLocMore">Ayrıntı</button><button type="button" id="btnLocClose">Kutuyu gizle</button></div>
       </div>
     </div>
     <div class="legend" id="legend"><svg width="26" height="16" aria-hidden="true"><defs><pattern id="lgPat" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#e0301e" stroke-width="1.6"/></pattern></defs><rect x=".75" y=".75" width="24.5" height="14.5" fill="url(#lgPat)" stroke="#e0301e" stroke-width="1.5"/></svg><span id="legendText">Sorgulanan parsel</span></div>
@@ -592,7 +592,8 @@ function poleOf(g){
 (function(){
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
-  var API_DEFAULT = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
+  var API_OLD = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
+  var API_DEFAULT = 'https://purple-morning-da64.engin-baysal.workers.dev';
   var LS = 'parsel-harita-v1';
 
   /* ---------- harita ---------- */
@@ -1299,7 +1300,8 @@ function poleOf(g){
     $('btnLoc').textContent = 'Konumumu göster';
   }
   $('btnLoc').addEventListener('click', function(){ if (me.id != null) { stopGeo(); fitAll(); } else startGeo(); });
-  $('btnLocClose').addEventListener('click', function(){ stopGeo(); fitAll(); });
+  // konum açıkken kutu gizlenebilir; işaret haritada kalır, 'Konumu kapat' ile kapanır
+  $('btnLocClose').addEventListener('click', function(){ $('navCard').hidden = true; });
   $('btnFitMap').addEventListener('click', function(){ fitAll(); });
   map.on('dragstart', function(){ $('follow').checked = false; });
 
@@ -1645,7 +1647,7 @@ function poleOf(g){
       if (s.hatchStyle) $('hatchStyle').value = s.hatchStyle;
       if (s.hatchColor) $('hatchColor').value = s.hatchColor;
       if (s.labels != null) $('showLabels').checked = !!s.labels;
-      if (s.api) $('apiBase').value = s.api;
+      if (s.api && s.api !== API_OLD) $('apiBase').value = s.api;
       if (s.conc) $('conc').value = s.conc;
     } catch (e) {}
   }

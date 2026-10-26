@@ -432,6 +432,19 @@ function parseList(text, defIl, defIlce){
   }
   return out;
 }
+function anyString(p){
+  var best = '';
+  Object.keys(p || {}).forEach(function(k){
+    var v = p[k];
+    if (typeof v === 'string' && v && !/^\d+$/.test(v) && !/^(geometry|type)$/i.test(k) && v.length > best.length && v.length < 80) best = v;
+  });
+  return best;
+}
+function anyId(p){
+  var ks = Object.keys(p || {});
+  for (var i = 0; i < ks.length; i++) if (/id|kod|code|no$/i.test(ks[i]) && (typeof p[ks[i]] === 'number' || /^\d+$/.test(String(p[ks[i]])))) return p[ks[i]];
+  return null;
+}
 function pickName(p, lvl){
   var keys = {
     il: ['text','ad','adi','name','ilAd','label'],
@@ -439,18 +452,21 @@ function pickName(p, lvl){
     mah: ['text','ad','adi','name','mahalleAd','label']
   }[lvl];
   for (var i = 0; i < keys.length; i++) if (typeof p[keys[i]] === 'string' && p[keys[i]]) return p[keys[i]];
-  return '';
+  return anyString(p);
 }
 function pickId(p){
   var keys = ['id','ilId','ilceId','mahalleId','kod','value'];
   for (var i = 0; i < keys.length; i++) if (p[keys[i]] != null) return p[keys[i]];
-  return null;
+  return anyId(p);
 }
 function listItems(json, lvl){
   var arr = [];
   if (Array.isArray(json)) arr = json;
   else if (json && Array.isArray(json.features)) arr = json.features.map(function(f){ return f.properties || f; });
   else if (json && Array.isArray(json.data)) arr = json.data;
+  else if (json && Array.isArray(json.items)) arr = json.items;
+  else if (json && Array.isArray(json.result)) arr = json.result;
+  else if (json && Array.isArray(json.sonuc)) arr = json.sonuc;
   return arr.map(function(p){ return {id: pickId(p), name: pickName(p, lvl)}; })
     .filter(function(x){ return x.id != null && x.name; });
 }
@@ -926,6 +942,12 @@ function poleOf(g){
     await Promise.all(ws);
     queue.forEach(function(r){ r.status = 'bekliyor'; });
     running = false; renderTable(); fitAll();
+    var errs = {}, nErr = 0;
+    rows.forEach(function(r){ if (r.status === 'hata' && r.note) { errs[r.note] = (errs[r.note] || 0) + 1; nErr++; } });
+    if (nErr) {
+      var top = Object.keys(errs).sort(function(a, b){ return errs[b] - errs[a]; })[0];
+      showNotice(nErr + ' satırda hata. En sık görülen neden (' + errs[top] + ' satır): ' + top);
+    }
   }
   $('btnRun').addEventListener('click', function(){
     var parsed = parseList($('list').value, $('defIl').value.trim(), $('defIlce').value.trim());

@@ -342,7 +342,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   <main class="mapwrap" id="mapwrap">
     <div id="map" aria-label="Parsel haritası"></div>
     <div class="navbox">
-      <div class="navtop"><button id="btnFull" type="button">Tam ekran</button><button class="primary" id="btnLoc" type="button">Konumumu göster</button></div>
+      <div class="navtop"><button id="btnFitMap" type="button">Parsellere git</button><button id="btnFull" type="button">Tam ekran</button><button class="primary" id="btnLoc" type="button">Konumumu göster</button></div>
       <div class="navcard" id="navCard" hidden>
         <div id="navLines"></div>
         <label class="check"><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
@@ -1243,8 +1243,9 @@ function poleOf(g){
     if (!keepCard) $('navCard').hidden = true;
     $('btnLoc').textContent = 'Konumumu göster';
   }
-  $('btnLoc').addEventListener('click', function(){ if (me.id != null) stopGeo(); else startGeo(); });
-  $('btnLocClose').addEventListener('click', function(){ stopGeo(); });
+  $('btnLoc').addEventListener('click', function(){ if (me.id != null) { stopGeo(); fitAll(); } else startGeo(); });
+  $('btnLocClose').addEventListener('click', function(){ stopGeo(); fitAll(); });
+  $('btnFitMap').addEventListener('click', function(){ fitAll(); });
   map.on('dragstart', function(){ $('follow').checked = false; });
 
   /* ---------- çıktı: JPEG / PDF ---------- */

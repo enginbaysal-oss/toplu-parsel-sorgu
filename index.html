@@ -184,7 +184,7 @@ details[open] summary{margin-bottom:10px}
 .pcs button.rst{width:auto;padding:0 9px;font:500 12px var(--font-body);background:#eef2f3;color:#15262d;border:1px solid #8a979c;box-shadow:none}
 .pcs input[type=color]{width:34px;height:32px;padding:1px;border:1px solid #8a979c;border-radius:5px;background:#fff;cursor:pointer}
 .leaflet-popup-close-button{display:none}
-.mapwrap.popup-open .navbox,.mapwrap.popup-open .legend{display:none}
+.mapwrap.popup-open .legend{display:none}
 .pclose{display:block;width:100%;margin-top:10px;padding:11px 12px;font:600 14px var(--font-body);border-radius:5px;border:1px solid #8a979c;background:#eef2f3;color:#15262d;cursor:pointer}
 .navtop{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .mapwrap.full{position:fixed;inset:0;z-index:2000;height:auto;min-height:0;border:0}
@@ -196,6 +196,9 @@ body.fs-lock{overflow:hidden}
 .navacts button,a.btnlink{font:500 13px var(--font-body);padding:7px 11px;border-radius:4px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-block}
 a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .navcard a{color:var(--accent)}
+.navcard.compact{width:auto;max-width:100%}
+.navcard .row{gap:6px}
+.navcard .row button{padding:6px 10px;font-size:12.5px}
 .navcard .big{font:600 15px/1.2 var(--font-head)}
 .navcard .in{color:var(--good)}
 .navcard .warn{color:var(--warn)}
@@ -343,10 +346,10 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     <div id="map" aria-label="Parsel haritası"></div>
     <div class="navbox">
       <div class="navtop"><button id="btnFitMap" type="button">Parsellere git</button><button id="btnFull" type="button">Tam ekran</button><button class="primary" id="btnLoc" type="button">Konumumu göster</button></div>
-      <div class="navcard" id="navCard" hidden>
+      <div class="navcard compact" id="navCard" hidden>
         <div id="navLines"></div>
-        <label class="check"><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
-        <button type="button" id="btnLocClose">Kapat</button>
+        <label class="check" id="followWrap" hidden><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
+        <div class="row"><button type="button" id="btnLocMore">Ayrıntı</button><button type="button" id="btnLocClose">Konumu kapat</button></div>
       </div>
     </div>
     <div class="legend" id="legend"><svg width="26" height="16" aria-hidden="true"><defs><pattern id="lgPat" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#e0301e" stroke-width="1.6"/></pattern></defs><rect x=".75" y=".75" width="24.5" height="14.5" fill="url(#lgPat)" stroke="#e0301e" stroke-width="1.5"/></svg><span id="legendText">Sorgulanan parsel</span></div>
@@ -767,7 +770,7 @@ function poleOf(g){
   var popupRow = null;
   function showPopup(r, latlng){
     popupRow = r;
-    L.popup({maxWidth: 300, autoPanPadding: [16, 16]}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
+    L.popup({maxWidth: 300, autoPanPaddingTopLeft: [16, 140], autoPanPaddingBottomRight: [16, 60]}).setLatLng(latlng).setContent(popupHtml(r)).openOn(map);
   }
   map.on('popupopen', function(ev){
     var el = ev.popup.getElement(), r = popupRow;
@@ -1137,7 +1140,7 @@ function poleOf(g){
   window.addEventListener('popstate', function(){ if (fsOn) setFull(false); });
 
   /* ---------- konum ---------- */
-  var me = {id: null, pos: null, marker: null, circle: null, line: null, fitted: false, route: null, routeTxt: '', routeFor: null};
+  var me = {id: null, pos: null, marker: null, circle: null, line: null, fitted: false, route: null, routeTxt: '', routeFor: null, expanded: false};
   var navLinesEl = $('navLines');
   function setNav(html){ navLinesEl.innerHTML = html; }
   function updateNav(){
@@ -1180,8 +1183,15 @@ function poleOf(g){
     } else if (!inside.length) {
       html += '<div class="mut">Gitmek istediğiniz parseli tabloda veya haritada seçin, yönlendirme çıkar.</div>';
     }
-    setNav(html);
+    var cut = html.indexOf('</div>') + 6, head = html.slice(0, cut), more = html.slice(cut);
+    setNav(head + '<div class="nav-more"' + (me.expanded ? '' : ' hidden') + '>' + more + '</div>');
   }
+  function syncExpanded(){
+    $('navCard').classList.toggle('compact', !me.expanded);
+    $('followWrap').hidden = !me.expanded;
+    $('btnLocMore').textContent = me.expanded ? 'Daha az' : 'Ayrıntı';
+  }
+  $('btnLocMore').addEventListener('click', function(){ me.expanded = !me.expanded; syncExpanded(); updateNav(); });
   async function drawRoute(){
     var sel = selected;
     if (!sel || !sel.feature || !me.pos) return;
@@ -1227,17 +1237,29 @@ function poleOf(g){
     setNav('<div class="err">' + esc(msg) + '</div>');
     if (e.code === 1) stopGeo(true);
   }
+  var geoOpts = {enableHighAccuracy: true, maximumAge: 2000, timeout: 20000}, wake = null;
+  async function lockScreen(){
+    try { if (navigator.wakeLock && me.id != null && document.visibilityState === 'visible') wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  function unlockScreen(){ try { if (wake) { wake.release(); wake = null; } } catch (e) {} }
+  document.addEventListener('visibilitychange', function(){
+    if (me.id != null && document.visibilityState === 'visible') {
+      try { navigator.geolocation.clearWatch(me.id); me.id = navigator.geolocation.watchPosition(onPos, onPosErr, geoOpts); } catch (e) {}
+      lockScreen();
+    }
+  });
   function startGeo(){
     $('navCard').hidden = false;
     if (!navigator.geolocation) { setNav('<div class="err">Bu tarayıcı konum özelliğini desteklemiyor.</div>'); return; }
     setNav('<div class="mut">Konum aranıyor…</div>');
     me.fitted = false;
-    me.id = navigator.geolocation.watchPosition(onPos, onPosErr, {enableHighAccuracy: true, maximumAge: 2000, timeout: 20000});
+    me.id = navigator.geolocation.watchPosition(onPos, onPosErr, geoOpts);
+    syncExpanded(); lockScreen();
     $('btnLoc').textContent = 'Konumu kapat';
   }
   function stopGeo(keepCard){
     if (me.id != null) navigator.geolocation.clearWatch(me.id);
-    me.id = null; me.pos = null;
+    me.id = null; me.pos = null; unlockScreen();
     [me.marker, me.circle, me.line, me.route].forEach(function(l){ if (l) map.removeLayer(l); });
     me.marker = me.circle = me.line = me.route = null; me.routeTxt = ''; me.routeFor = null;
     if (!keepCard) $('navCard').hidden = true;

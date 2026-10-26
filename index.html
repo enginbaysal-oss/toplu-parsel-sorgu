@@ -76,6 +76,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font-body);-webkit-font-smoothing:antialiased}
 .app{display:grid;grid-template-columns:minmax(340px,430px) minmax(0,1fr);height:100%}
@@ -345,6 +346,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <div class="navcard" id="navCard" hidden>
         <div id="navLines"></div>
         <label class="check"><input type="checkbox" id="follow" checked> Haritayı konumuma kaydır</label>
+        <button type="button" id="btnLocClose">Kapat</button>
       </div>
     </div>
     <div class="legend" id="legend"><svg width="26" height="16" aria-hidden="true"><defs><pattern id="lgPat" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#e0301e" stroke-width="1.6"/></pattern></defs><rect x=".75" y=".75" width="24.5" height="14.5" fill="url(#lgPat)" stroke="#e0301e" stroke-width="1.5"/></svg><span id="legendText">Sorgulanan parsel</span></div>
@@ -1242,6 +1244,7 @@ function poleOf(g){
     $('btnLoc').textContent = 'Konumumu göster';
   }
   $('btnLoc').addEventListener('click', function(){ if (me.id != null) stopGeo(); else startGeo(); });
+  $('btnLocClose').addEventListener('click', function(){ stopGeo(); });
   map.on('dragstart', function(){ $('follow').checked = false; });
 
   /* ---------- çıktı: JPEG / PDF ---------- */

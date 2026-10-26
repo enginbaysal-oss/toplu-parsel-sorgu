@@ -663,7 +663,7 @@ function poleOf(g){
   }
 
   /* ---------- durum ---------- */
-  var rows = [], abort = false, running = false, selected = null;
+  var rows = [], abort = false, running = false, selected = null, blocked = 0;
   var memoCache = new Map();
   function memo(k, fn){
     if (!memoCache.has(k)) { var p = fn(); memoCache.set(k, p); p.catch(function(){ memoCache.delete(k); }); }
@@ -684,7 +684,8 @@ function poleOf(g){
       if (res.status === 404) { var nf = new Error('Parsel bulunamadı'); nf.notFound = true; throw nf; }
       if (!res.ok) {
         var he = new Error('Sunucu yanıtı HTTP ' + res.status + ' · ' + url);
-        he.retry = [403, 429, 500, 502, 503, 504].indexOf(res.status) >= 0;
+        he.status = res.status;
+        he.retry = [500, 502, 503, 504].indexOf(res.status) >= 0;
         throw he;
       }
       var txt = await res.text();
@@ -710,13 +711,20 @@ function poleOf(g){
     }
   }
 
+  var IDARI_KEY = 'parsel-idari-v1';
+  function lsGet(k){ try { var o = JSON.parse(localStorage.getItem(IDARI_KEY) || '{}'), e = o[k]; if (e && Date.now() - e.t < 2592000000) return e.v; } catch (x) {} return null; }
+  function lsSet(k, v){ try { var o = JSON.parse(localStorage.getItem(IDARI_KEY) || '{}'); o[k] = {t: Date.now(), v: v}; localStorage.setItem(IDARI_KEY, JSON.stringify(o)); } catch (x) {} }
+  function cachedList(k, fetcher){
+    var c = lsGet(k); if (c && c.length) return Promise.resolve(c);
+    return fetcher().then(function(v){ if (v && v.length) lsSet(k, v); return v; });
+  }
   async function resolveIds(r){
     var b = base();
-    var ils = await memo('il', function(){ return fetchJSON(b + '/idariYapi/ilListe').then(function(j){ return listItems(j, 'il'); }); });
+    var ils = await memo('il', function(){ return cachedList('il@' + b, function(){ return fetchJSON(b + '/idariYapi/ilListe').then(function(j){ return listItems(j, 'il'); }); }); });
     var il = matchName(ils, r.il, false);
-    var ilces = await memo('ilce:' + il.id, function(){ return fetchJSON(b + '/idariYapi/ilceListe/' + il.id).then(function(j){ return listItems(j, 'ilce'); }); });
+    var ilces = await memo('ilce:' + il.id, function(){ return cachedList('ilce:' + il.id + '@' + b, function(){ return fetchJSON(b + '/idariYapi/ilceListe/' + il.id).then(function(j){ return listItems(j, 'ilce'); }); }); });
     var ilce = matchName(ilces, r.ilce, false);
-    var mahs = await memo('mah:' + ilce.id, function(){ return fetchJSON(b + '/idariYapi/mahalleListe/' + ilce.id).then(function(j){ return listItems(j, 'mah'); }); });
+    var mahs = await memo('mah:' + ilce.id, function(){ return cachedList('mah:' + ilce.id + '@' + b, function(){ return fetchJSON(b + '/idariYapi/mahalleListe/' + ilce.id).then(function(j){ return listItems(j, 'mah'); }); }); });
     var mah = matchName(mahs, r.mah, true);
     return mah.id;
   }
@@ -742,6 +750,7 @@ function poleOf(g){
     } catch (e) {
       r.status = e.notFound ? 'yok' : 'hata';
       r.note = e.notFound ? 'Bu ada ve parsel mahallede bulunamadı' : e.message;
+      if (e.status === 403 || e.status === 429) { blocked = e.status; r.note = 'TKGM erişimi reddetti (HTTP ' + e.status + ')'; }
       if (e.network) showNotice(e.message);
     }
     scheduleRender();
@@ -925,17 +934,17 @@ function poleOf(g){
 
   /* ---------- çalıştırma ---------- */
   async function runQueue(){
-    running = true; abort = false; showNotice(''); renderTable();
+    running = true; abort = false; blocked = 0; showNotice(''); renderTable();
     var conc = parseInt($('conc').value, 10) || 3;
     var queue = rows.filter(function(r){ return r.status === 'bekliyor'; });
     var processed = 0;
     async function worker(){
-      while (!abort) {
+      while (!abort && !blocked) {
         var r = queue.shift(); if (!r) break;
         await processRow(r);
         processed++;
         if (processed === 1 || processed % 25 === 0) fitAll();
-        await new Promise(function(res){ setTimeout(res, 120); });
+        await new Promise(function(res){ setTimeout(res, 300); });
       }
     }
     var ws = []; for (var i = 0; i < conc; i++) ws.push(worker());
@@ -944,7 +953,9 @@ function poleOf(g){
     running = false; renderTable(); fitAll();
     var errs = {}, nErr = 0;
     rows.forEach(function(r){ if (r.status === 'hata' && r.note) { errs[r.note] = (errs[r.note] || 0) + 1; nErr++; } });
-    if (nErr) {
+    if (blocked) {
+      showNotice('TKGM sunucusu isteklerinizi geçici olarak reddetti (HTTP ' + blocked + '). Sorgu durduruldu ki engel uzamasın. Bir süre bekleyin (birkaç dakika ile birkaç saat arası), ya da Wi-Fi yerine mobil veriyi (veya tersini) deneyin. Sonra "Hatalıları yeniden dene" ile kaldığınız yerden devam edin.');
+    } else if (nErr) {
       var top = Object.keys(errs).sort(function(a, b){ return errs[b] - errs[a]; })[0];
       showNotice(nErr + ' satırda hata. En sık görülen neden (' + errs[top] + ' satır): ' + top);
     }

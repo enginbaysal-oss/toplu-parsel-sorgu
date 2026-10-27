@@ -337,6 +337,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
             <select id="conc"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>
           </label>
         </div>
+        <div class="row" style="margin-top:8px"><button type="button" id="btnTest">Bağlantıyı sına</button></div><pre id="testOut" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0" hidden></pre>
         <p class="hint" style="margin-top:8px">Veriler TKGM Parsel Sorgu servisinden gelir. Sınırlar bilgi amaçlıdır, kesin sınır yerine geçmez. Tarayıcı servise erişimi engellerse kendi aracı sunucunuzun adresini buraya yazabilir veya hazır bir GeoJSON dosyasını açabilirsiniz.</p>
       </details>
     </section>
@@ -1655,6 +1656,23 @@ function poleOf(g){
   $('hatchStyle').addEventListener('change', function(){ restyle(); save(); });
   $('hatchColor').addEventListener('input', function(){ restyle(); save(); });
   $('showLabels').addEventListener('change', function(){ rows.forEach(applyLabel); save(); });
+
+  $('btnTest').addEventListener('click', async function(){
+    var out = $('testOut'); out.hidden = false;
+    var url = base() + '/idariYapi/ilceListe/45', t0 = Date.now();
+    out.textContent = 'Deneniyor: ' + url;
+    var r = '';
+    try {
+      var res = await fetch(url, {cache: 'no-store'});
+      var txt = await res.text();
+      r = 'HTTP ' + res.status + ' · ' + (res.headers.get('content-type') || '?') + '\n' + txt.slice(0, 160);
+    } catch (e) {
+      r = 'Hata: ' + e.name + ' – ' + e.message + '\n';
+      try { await fetch(url, {mode: 'no-cors', cache: 'no-store'}); r += 'Adrese ulaşıldı ama tarayıcı yanıtı okumaya izin vermedi (CORS veya giriş/koruma sayfası).'; }
+      catch (e2) { r += 'Adrese hiç ulaşılamadı (internet, DNS veya engel).'; }
+    }
+    out.textContent = url + '\n' + r + '\n(' + (Date.now() - t0) + ' ms)';
+  });
   $('apiBase').addEventListener('change', function(){ memoCache.clear(); save(); });
   $('conc').addEventListener('change', save);
   $('list').addEventListener('input', save);

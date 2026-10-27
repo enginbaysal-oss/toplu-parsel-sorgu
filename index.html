@@ -1529,7 +1529,7 @@ function poleOf(g){
 
   function renderTablePages(items, title){
     var PW = 1654, PH = 2339, M = 110, RH = 62, HH = 230, pages = [];
-    var cols = [{t: '#', w: 76}, {t: 'Mahalle', w: 380}, {t: 'İlçe / İl', w: 360}, {t: 'Ada', w: 110}, {t: 'Parsel', w: 130}, {t: 'Alan', w: 190}, {t: 'Nitelik', w: 188}];
+    var cols = [{t: 'Sıra No', w: 120}, {t: 'İl', w: 220}, {t: 'İlçe', w: 230}, {t: 'Mahalle', w: 390}, {t: 'Ada', w: 120}, {t: 'Parsel', w: 130}, {t: 'Yüzölçümü', w: 224}];
     var per = Math.floor((PH - HH - 70 - M) / RH), np = Math.max(1, Math.ceil(items.length / per));
     function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
     for (var pg = 0; pg < np; pg++) {
@@ -1548,7 +1548,7 @@ function poleOf(g){
         y += RH; cx = M;
         if (i % 2) { x.fillStyle = '#f3f6f7'; x.fillRect(M, y, PW - 2 * M, RH); }
         var p = r.props || {};
-        var vals = [pg * per + i + 1, r.mah, [r.ilce, r.il].filter(Boolean).join(' / '), r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik'])];
+        var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu']))];
         x.fillStyle = '#15262d';
         cols.forEach(function(col, k){ x.fillText(fit(x, vals[k], col.w), cx + 8, y + RH / 2); cx += col.w; });
       });

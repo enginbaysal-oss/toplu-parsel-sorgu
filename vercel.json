@@ -1,0 +1,7 @@
+{
+  "regions": ["fra1"],
+  "rewrites": [
+    { "source": "/idariYapi/:path*", "destination": "/api/tkgm?p=idariYapi/:path*" },
+    { "source": "/parsel/:path*", "destination": "/api/tkgm?p=parsel/:path*" }
+  ]
+}

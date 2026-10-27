@@ -593,7 +593,7 @@ function poleOf(g){
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var API_OLD = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
-  var API_DEFAULT = 'https://purple-morning-da64.engin-baysal.workers.dev';
+  var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : 'https://purple-morning-da64.engin-baysal.workers.dev';
   var LS = 'parsel-harita-v1';
 
   /* ---------- harita ---------- */

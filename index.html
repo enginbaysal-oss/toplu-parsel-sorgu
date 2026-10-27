@@ -410,6 +410,17 @@ function parseList(text, defIl, defIlce){
         row.ada = ap ? ap[1] : ''; row.parsel = ap ? ap[2] : '';
       }
     } else {
+      if (c.length === 1) {
+        var tk = c[0].split(/\s+/).filter(Boolean), m2 = /^(\d+)\s*\/\s*(\d+)$/.exec(tk[tk.length - 1] || '');
+        if (m2) tk = tk.slice(0, -1).concat([m2[1], m2[2]]);
+        var n = tk.length;
+        if (n >= 3 && /^\d+$/.test(tk[n - 1]) && /^\d+$/.test(tk[n - 2])) {
+          var rest = tk.slice(0, n - 2);
+          if (rest.length >= 3) c = [rest[0], rest[1], rest.slice(2).join(' '), tk[n - 2], tk[n - 1]];
+          else if (rest.length === 2) c = [rest[0], rest[1], tk[n - 2], tk[n - 1]];
+          else c = [rest[0], tk[n - 2], tk[n - 1]];
+        }
+      }
       var last = c[c.length - 1] || '';
       var combo = /^(\d+)\s*\/\s*(\d+)$/.exec(last);
       if (combo) c = c.slice(0, -1).concat([combo[1], combo[2]]);

@@ -101,6 +101,10 @@ jobs:
           }
           JAVAEOF
           npx cap sync android
+      - name: Sabit imza anahtarını kullan (güncellemeler üstüne kurulabilsin)
+        run: |
+          mkdir -p ~/.android
+          cp "$GITHUB_WORKSPACE/keys/debug.keystore" ~/.android/debug.keystore
       - name: APK derle
         working-directory: android
         run: ./gradlew assembleDebug

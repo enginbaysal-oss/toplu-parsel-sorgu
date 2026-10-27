@@ -1530,7 +1530,10 @@ function poleOf(g){
   function renderTablePages(items, title){
     var PW = 1654, PH = 2339, M = 110, RH = 62, HH = 230, pages = [];
     var cols = [{t: 'Sıra No', w: 110}, {t: 'İl', w: 160}, {t: 'İlçe', w: 190}, {t: 'Mahalle', w: 330}, {t: 'Ada', w: 100}, {t: 'Parsel', w: 110}, {t: 'Yüzölçümü', w: 190}, {t: 'Nitelik', w: 244}];
-    var per = Math.floor((PH - HH - 70 - M) / RH), np = Math.max(1, Math.ceil(items.length / per));
+    var per = Math.floor((PH - HH - 70 - M) / RH);
+    function areaNum(r){ var v = prop(r.props || {}, ['alan', 'tapuAlani', 'yuzolcumu']); if (v === '' || v == null) return 0; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
+    var total = items.reduce(function(a, r){ return a + areaNum(r); }, 0);
+    var rowsAll = items.concat([{_total: true}]), np = Math.max(1, Math.ceil(rowsAll.length / per));
     function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
     for (var pg = 0; pg < np; pg++) {
       var c = document.createElement('canvas'); c.width = PW; c.height = PH; var x = c.getContext('2d');
@@ -1544,8 +1547,16 @@ function poleOf(g){
       x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
       cols.forEach(function(col){ x.fillText(col.t, cx + 8, y + RH / 2); cx += col.w; });
       x.font = '400 24px system-ui, Arial, sans-serif';
-      items.slice(pg * per, (pg + 1) * per).forEach(function(r, i){
+      rowsAll.slice(pg * per, (pg + 1) * per).forEach(function(r, i){
         y += RH; cx = M;
+        if (r._total) {
+          x.fillStyle = '#dfe8ea'; x.fillRect(M, y, PW - 2 * M, RH);
+          x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
+          x.fillText('Toplam (' + items.length + ' parsel)', M + cols[0].w + cols[1].w + cols[2].w + 8, y + RH / 2);
+          x.fillText(fmtArea(total), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
+          x.font = '400 24px system-ui, Arial, sans-serif';
+          return;
+        }
         if (i % 2) { x.fillStyle = '#f3f6f7'; x.fillRect(M, y, PW - 2 * M, RH); }
         var p = r.props || {};
         var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik'])];

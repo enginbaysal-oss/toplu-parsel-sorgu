@@ -593,7 +593,7 @@ function poleOf(g){
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var API_OLD = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
-  var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : 'https://purple-morning-da64.engin-baysal.workers.dev';
+  var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : 'https://toplu-parsel-sorgu-tdqp-9tdx0xge3-engin16.vercel.app';
   var LS = 'parsel-harita-v1';
 
   /* ---------- harita ---------- */
@@ -1647,7 +1647,7 @@ function poleOf(g){
       if (s.hatchStyle) $('hatchStyle').value = s.hatchStyle;
       if (s.hatchColor) $('hatchColor').value = s.hatchColor;
       if (s.labels != null) $('showLabels').checked = !!s.labels;
-      if (s.api && s.api !== API_OLD) $('apiBase').value = s.api;
+      if (s.api && s.api !== API_OLD && s.api !== 'https://purple-morning-da64.engin-baysal.workers.dev') $('apiBase').value = s.api;
       if (s.conc) $('conc').value = s.conc;
     } catch (e) {}
   }

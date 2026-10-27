@@ -252,7 +252,13 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
             <option value="sat">Uydu görüntüsü</option>
             <option value="hybrid">Uydu ve yer adları</option>
             <option value="osm">OpenStreetMap</option>
+            <option value="mb-sat">Mapbox uydu</option>
+            <option value="mb-hybrid">Mapbox uydu + yol/yer adları</option>
+            <option value="mb-street">Mapbox sokak haritası</option>
           </select>
+        </label>
+        <label class="f grow" id="mbWrap" hidden>Mapbox anahtarı (pk. ile başlar)
+          <input type="text" id="mbToken" spellcheck="false" autocomplete="off" placeholder="pk.eyJ1...">
         </label>
         <label class="f grow">Tarama
           <select id="hatchStyle">
@@ -617,8 +623,24 @@ function poleOf(g){
     labels: L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom: 19, maxZoom: 21}),
     osm: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxNativeZoom: 19, maxZoom: 21, attribution: '© OpenStreetMap katkıda bulunanlar'})
   };
+  var MB_STYLE = {'mb-sat': 'satellite-v9', 'mb-hybrid': 'satellite-streets-v12', 'mb-street': 'streets-v12'}, mbLayer = null, mbKey = '';
+  function mbTok(){ var e = document.getElementById('mbToken'); return e ? e.value.trim() : ''; }
   function setBase(v){
     Object.keys(tiles).forEach(function(k){ if (map.hasLayer(tiles[k])) map.removeLayer(tiles[k]); });
+    if (mbLayer && map.hasLayer(mbLayer)) map.removeLayer(mbLayer);
+    var isMb = !!MB_STYLE[v];
+    var w = document.getElementById('mbWrap'); if (w) w.hidden = !isMb;
+    if (isMb && mbTok()) {
+      var key = v + '|' + mbTok();
+      if (key !== mbKey) {
+        mbKey = key;
+        mbLayer = L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/' + MB_STYLE[v] + '/tiles/256/{z}/{x}/{y}@2x?access_token=' + encodeURIComponent(mbTok()),
+          {maxNativeZoom: 22, maxZoom: 22, attribution: '© Mapbox © OpenStreetMap katkıda bulunanlar'});
+      }
+      mbLayer.addTo(map); mbLayer.bringToBack();
+      return;
+    }
+    if (isMb) v = v === 'mb-street' ? 'street' : (v === 'mb-hybrid' ? 'hybrid' : 'sat');
     if (v === 'sat') tiles.sat.addTo(map);
     else if (v === 'hybrid') { tiles.sat.addTo(map); tiles.labels.addTo(map); }
     else if (v === 'osm') tiles.osm.addTo(map);
@@ -1321,6 +1343,8 @@ function poleOf(g){
   var exporting = false;
   var ESRI_T = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
   function tileTemplates(base){
+    if (MB_STYLE[base] && mbTok()) return ['https://api.mapbox.com/styles/v1/mapbox/' + MB_STYLE[base] + '/tiles/256/{z}/{x}/{y}?access_token=' + encodeURIComponent(mbTok())];
+    if (MB_STYLE[base]) base = base === 'mb-street' ? 'street' : (base === 'mb-hybrid' ? 'hybrid' : 'sat');
     var main = (base === 'sat' || base === 'hybrid') ? 'World_Imagery' : 'World_Street_Map';
     var t = [ESRI_T + main + '/MapServer/tile/{z}/{y}/{x}'];
     if (base === 'hybrid') t.push(ESRI_T + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}');
@@ -1646,7 +1670,7 @@ function poleOf(g){
     try {
       localStorage.setItem(LS, JSON.stringify({list: $('list').value, defIl: $('defIl').value, defIlce: $('defIlce').value,
         base: $('base').value, hatchStyle: $('hatchStyle').value, hatchColor: $('hatchColor').value,
-        labels: $('showLabels').checked, api: $('apiBase').value, conc: $('conc').value}));
+        labels: $('showLabels').checked, api: $('apiBase').value, conc: $('conc').value, mb: $('mbToken').value}));
     } catch (e) {}
   }
   function load(){
@@ -1661,9 +1685,11 @@ function poleOf(g){
       if (s.labels != null) $('showLabels').checked = !!s.labels;
       if (s.api && s.api !== API_OLD && s.api !== 'https://purple-morning-da64.engin-baysal.workers.dev') $('apiBase').value = s.api;
       if (s.conc) $('conc').value = s.conc;
+      if (s.mb) $('mbToken').value = s.mb;
     } catch (e) {}
   }
   $('base').addEventListener('change', function(){ setBase(this.value); save(); });
+  $('mbToken').addEventListener('change', function(){ setBase($('base').value); save(); });
   $('hatchStyle').addEventListener('change', function(){ restyle(); save(); });
   $('hatchColor').addEventListener('input', function(){ restyle(); save(); });
   $('showLabels').addEventListener('change', function(){ rows.forEach(applyLabel); save(); });

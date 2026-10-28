@@ -213,6 +213,13 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   header.top,section{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
 @media (prefers-reduced-motion:reduce){.progress>i{transition:none}}
+  .colorsum{margin:12px 0;padding:10px 12px;border:1px solid var(--line,#d5dde0);border-radius:10px;background:#fff}
+  .colorsum h3{margin:0 0 6px;font-size:15px}
+  .colorsum table{width:100%;border-collapse:collapse}
+  .colorsum td{padding:5px 4px;border-top:1px solid #edf1f2;white-space:nowrap}
+  .colorsum .num{text-align:right;white-space:nowrap}
+  .colorsum .tot td{font-weight:700;border-top:2px solid #cfd9dc}
+  .colorsum .sw{display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid #0003;vertical-align:-2px}
 </style>
 </head>
 <body>
@@ -305,6 +312,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         </table>
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
       </div>
+      <div class="colorsum" id="colorSum" hidden></div>
       <div class="colorbox">
         <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
         <div class="swatches" id="swatches">
@@ -889,7 +897,30 @@ function poleOf(g){
     renderQueued = true;
     requestAnimationFrame(function(){ renderQueued = false; renderTable(); });
   }
+  var COLOR_NAMES = {'#e0301e': 'Kırmızı', '#f08a00': 'Turuncu', '#f2d600': 'Sarı', '#1fa34a': 'Yeşil', '#12b5cb': 'Turkuaz', '#2c5fe0': 'Mavi', '#8a3ffc': 'Mor', '#ffffff': 'Beyaz', '#000000': 'Siyah'};
+  function areaOf(r){ var v = prop(r.props || {}, ['alan', 'tapuAlani', 'yuzolcumu']); if (v === '' || v == null) return 0; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
+  function colorGroups(list){
+    var map = {}, out = [], def = String($('hatchColor').value || '').toLowerCase();
+    list.forEach(function(r){
+      if (!r.feature) return;
+      var c = String(r.color || def).toLowerCase();
+      if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0}; out.push(map[c]); }
+      map[c].n++; map[c].area += areaOf(r);
+    });
+    return out;
+  }
+  function renderColorSum(){
+    var box = $('colorSum'), g = colorGroups(rows), any = rows.some(function(r){ return r.feature && r.color; });
+    if (!box) return;
+    if (!any || !g.length) { box.hidden = true; box.innerHTML = ''; return; }
+    var tot = g.reduce(function(a, x){ return a + x.area; }, 0), n = g.reduce(function(a, x){ return a + x.n; }, 0);
+    box.innerHTML = '<h3>Renklere göre toplam yüzölçümü</h3><table>' + g.map(function(x){
+      return '<tr><td><span class="sw" style="background:' + esc(x.color) + '"></span> ' + esc(x.name) + '</td><td class="num">' + x.n + ' parsel</td><td class="num">' + esc(fmtArea(x.area)) + '</td></tr>';
+    }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td></tr></table>';
+    box.hidden = false;
+  }
   function renderTable(){
+    renderColorSum();
     var html = '';
     rows.forEach(function(r, i){
       var area = r.props ? fmtArea(prop(r.props, ['alan', 'tapuAlani', 'yuzolcumu'])) : '';
@@ -1534,7 +1565,8 @@ function poleOf(g){
     function areaNum(r){ var v = prop(r.props || {}, ['alan', 'tapuAlani', 'yuzolcumu']); if (v === '' || v == null) return 0; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
     var total = items.reduce(function(a, r){ return a + (r.feature ? areaNum(r) : 0); }, 0);
     var nFound = items.filter(function(r){ return r.feature; }).length, nMiss = items.length - nFound;
-    var rowsAll = items.concat(nMiss ? [{_total: 1}, {_total: 2}] : [{_total: 1}]), np = Math.max(1, Math.ceil(rowsAll.length / per));
+    var grp = colorGroups(items), anyCol = items.some(function(r){ return r.feature && r.color; });
+    var rowsAll = items.concat(nMiss ? [{_total: 1}, {_total: 2}] : [{_total: 1}]).concat(anyCol ? [{_ghead: 1}].concat(grp.map(function(g){ return {_grp: g}; })) : []), np = Math.max(1, Math.ceil(rowsAll.length / per));
     function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
     for (var pg = 0; pg < np; pg++) {
       var c = document.createElement('canvas'); c.width = PW; c.height = PH; var x = c.getContext('2d');
@@ -1550,6 +1582,25 @@ function poleOf(g){
       x.font = '400 24px system-ui, Arial, sans-serif';
       rowsAll.slice(pg * per, (pg + 1) * per).forEach(function(r, i){
         y += RH; cx = M;
+        if (r._ghead) {
+          x.fillStyle = '#0e5560'; x.fillRect(M, y, PW - 2 * M, RH);
+          x.fillStyle = '#ffffff'; x.font = '700 24px system-ui, Arial, sans-serif';
+          x.fillText('Renklere göre toplam yüzölçümü', M + 8, y + RH / 2);
+          x.font = '400 24px system-ui, Arial, sans-serif';
+          return;
+        }
+        if (r._grp) {
+          var g = r._grp;
+          x.fillStyle = '#ffffff'; x.fillRect(M, y, PW - 2 * M, RH);
+          x.fillStyle = g.color; x.fillRect(M + 12, y + 14, 34, 34);
+          x.strokeStyle = '#15262d'; x.lineWidth = 2; x.strokeRect(M + 12, y + 14, 34, 34);
+          x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
+          x.fillText(g.name + ' · ' + g.n + ' parsel', M + 62, y + RH / 2);
+          x.fillText(fmtArea(g.area), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
+          x.strokeStyle = '#dfe8ea'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
+          x.font = '400 24px system-ui, Arial, sans-serif';
+          return;
+        }
         if (r._total) {
           x.fillStyle = '#dfe8ea'; x.fillRect(M, y, PW - 2 * M, RH);
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';

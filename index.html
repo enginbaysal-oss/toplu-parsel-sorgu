@@ -1395,7 +1395,7 @@ function poleOf(g){
   var LAYERS_KEY = 'parsel-harita-layers-v1';
   var TUCBS = 'https://tucbs-public-api.csb.gov.tr/';
   var PRESET_LAYERS = [
-    {id: 'eplanv', name: 'e-Plan imar planları (ayrıntılı, tüm plan sınıfları)', type: 'wms', url: 'https://tucbs-public-api3.csb.gov.tr/trk_cbsgm_eplanvector_wms', preset: true,
+    {id: 'eplanv', name: 'e-Plan imar planları (ayrıntılı, tüm plan sınıfları)', type: 'wms', url: 'https://tucbs-public-api3.csb.gov.tr/trk_cbsgm_eplanvector_wms', preset: true, minZoom: 12,
      layers: (function(){
        var k = ['tarim', 'kentsel_calisma', 'turizm_alani', 'sosyal_kulturel_alan', 'saglik_tesis_alani', 'egitim_tesis_alani', 'acik_yesil_alan', 'su_yuzeyi', 'enerji_dagitim_depolama', 'teknik_altyapi', 'orman', 'mera', 'sulak_alan', 'arazi_kullanimi_devam_ettirilerek_korunacak_alanlar', 'ozel_kanunlarla_belirlenen_alan', 'afet_hizmet_alani', 'demiryolu'];
        return ['uip_konut'].concat(k.map(function(x){ return 'uip_' + x; }), ['nip_gelisme_konut'], k.map(function(x){ return 'nip_' + x; }), ['uip_plan_siniri', 'nip_plan_siniri']).join(',');
@@ -1418,7 +1418,7 @@ function poleOf(g){
     if (layerObjs[d.id]) return layerObjs[d.id];
     var o;
     if (d.type === 'xyz') o = L.tileLayer(d.url, {maxZoom: 22, maxNativeZoom: 19});
-    else o = L.tileLayer.wms(d.url, {layers: d.layers || '0', format: 'image/png', transparent: true, version: '1.3.0', maxZoom: 22, attribution: d.name});
+    else o = L.tileLayer.wms(d.url, {layers: d.layers || '0', format: 'image/png', transparent: true, version: '1.3.0', maxZoom: 22, minZoom: d.minZoom || 0, attribution: d.name});
     o._errs = 0;
     o.on('tileerror', function(){ o._errs++; if (o._errs === 3) renderLayerPanel(); });
     o.on('tileload', function(){ if (o._errs) { o._errs = 0; renderLayerPanel(); } });
@@ -1437,7 +1437,7 @@ function poleOf(g){
       h += '<div class="ly" data-id="' + esc(d.id) + '"><div class="ly-top"><input type="checkbox" class="ly-on"' + (st.on ? ' checked' : '') + ' aria-label="Katmanı aç/kapat"><span>' + esc(d.name) + '</span>' +
         (d.preset ? '' : '<button type="button" class="ghost ly-del">Sil</button>') + '</div>' +
         '<input type="range" class="ly-op" min="10" max="100" value="' + Math.round((st.op == null ? 0.7 : st.op) * 100) + '" aria-label="Saydamlık">' +
-        (st.on && o && o._errs >= 3 ? '<div class="ly-err">Bu katman yüklenemedi. Servis kapalı olabilir veya bu bölgeyi kapsamıyor.</div>' : '') + '</div>';
+        (st.on && d.minZoom && map.getZoom() < d.minZoom ? '<div class="ly-err" style="color:#586a72">Bu katman haritaya yaklaşınca (yakınlaştırma ' + d.minZoom + ' ve üzeri, mahalle ölçeği) görünür.</div>' : '') + (st.on && o && o._errs >= 3 ? '<div class="ly-err">Bu katman yüklenemedi. Servis kapalı olabilir veya bu bölgeyi kapsamıyor.</div>' : '') + '</div>';
     });
     $('lpList').innerHTML = h;
   }
@@ -1467,6 +1467,7 @@ function poleOf(g){
     userLayers.push(d); layerState[d.id] = {on: true, op: 0.7}; saveLayers(); applyLayer(d); renderLayerPanel();
     $('lyName').value = ''; $('lyUrl').value = ''; $('lyLayers').value = '';
   });
+  map.on('zoomend', function(){ if (!$('layerPanel').hidden) renderLayerPanel(); });
   allLayers().forEach(applyLayer);
 
   map.on('dragstart', function(){ $('follow').checked = false; });

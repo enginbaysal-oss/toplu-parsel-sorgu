@@ -1393,9 +1393,17 @@ function poleOf(g){
 
   /* ---------- harita katmanları (WMS / karo) ---------- */
   var LAYERS_KEY = 'parsel-harita-layers-v1';
+  var TUCBS = 'https://tucbs-public-api.csb.gov.tr/';
   var PRESET_LAYERS = [
-    {id: 'cdp-im', name: 'Çevre düzeni planı 1/100.000 (İzmir–Manisa)', type: 'wms', url: 'https://tucbs-public-api.csb.gov.tr/csb_cdp_im_wms',
-     layers: Array.apply(null, Array(40)).map(function(_, i){ return i; }).join(','), preset: true}
+    {id: 'uip', name: 'Uygulama imar planı (e-Plan, kesinleşmiş)', type: 'wms', url: TUCBS + 'trk_eplan_kesinlesmis_uip_wms', layers: 'tucbs_UIP,tucbsPlanSinir_UIP', preset: true},
+    {id: 'nip', name: 'Nazım imar planı (e-Plan, kesinleşmiş)', type: 'wms', url: TUCBS + 'trk_eplan_kesinlesmis_nip_wms', layers: 'tucbs_NIP,tucbsPlanSinir_NIP', preset: true},
+    {id: 'cdp-im', name: 'Çevre düzeni planı 1/100.000 (İzmir–Manisa)', type: 'wms', url: TUCBS + 'csb_cdp_im_wms',
+     layers: Array.apply(null, Array(40)).map(function(_, i){ return i; }).join(','), preset: true},
+    {id: 'kiyi', name: 'Kıyı kenar çizgisi', type: 'wms', url: TUCBS + 'trk_mpgm_uy_kiyiKenarCizgisi_wms', layers: 'YKDB_kiyiKenarCizgisi', preset: true},
+    {id: 'milli', name: 'Milli parklar', type: 'wms', url: TUCBS + 'trk_dkmpgm_milli_parklar_wms', layers: '0', preset: true},
+    {id: 'tabpark', name: 'Tabiat parkları', type: 'wms', url: TUCBS + 'trk_dkmpgm_tabiat_parklari_wms', layers: '0', preset: true},
+    {id: 'tabkor', name: 'Tabiat koruma alanları', type: 'wms', url: TUCBS + 'trk_dkmpgm_tabiat_koruma_alanlari_wms', layers: '0', preset: true},
+    {id: 'yaban', name: 'Yaban hayatı geliştirme sahaları', type: 'wms', url: TUCBS + 'trk_dkmpgm_yabanhayati_koruma_ve_gelistirme_sahalari_wms', layers: '0', preset: true}
   ];
   var userLayers = [], layerState = {}, layerObjs = {};
   try { userLayers = JSON.parse(localStorage.getItem(LAYERS_KEY + '-user') || '[]'); layerState = JSON.parse(localStorage.getItem(LAYERS_KEY + '-state') || '{}'); } catch (e) {}

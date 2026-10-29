@@ -1399,9 +1399,6 @@ function poleOf(g){
     {id: 'nip', name: 'Nazım imar planı (e-Plan, kesinleşmiş)', type: 'wms', url: TUCBS + 'trk_eplan_kesinlesmis_nip_wms', layers: 'tucbs_NIP,tucbsPlanSinir_NIP', preset: true},
     {id: 'cdp-im', name: 'Çevre düzeni planı 1/100.000 (İzmir–Manisa)', type: 'wms', url: TUCBS + 'csb_cdp_im_wms',
      layers: Array.apply(null, Array(40)).map(function(_, i){ return i; }).join(','), preset: true},
-    {id: 'osb', name: 'OSB planları (Organize sanayi bölgeleri)', type: 'wms', url: 'https://ucbp-api.tucbs.gov.tr/geoservice/haritagoruntuleyici/48782/wms/43942a59-453a-4bb8-bcdf-b170e1d3f52c', layers: 'osb_planlari', styles: 'osb_plan_lejant', preset: true},
-    {id: 'orto', name: 'Ortofoto, HGM (doğrudan)', type: 'xyz', url: 'https://atlas.harita.gov.tr/ortofotoservis/{z}/{x}/{y}.jpg', preset: true},
-    {id: 'orto2', name: 'Ortofoto, HGM (TUCBS üzerinden)', type: 'xyz', url: 'https://ucbp-api.tucbs.gov.tr/proxyservice/proxyservice/getByUrl?url=https%3A%2F%2Fatlas.harita.gov.tr%2Fortofotoservis%2F{z}%2F{x}%2F{y}.jpg', preset: true},
     {id: 'kiyi', name: 'Kıyı kenar çizgisi', type: 'wms', url: TUCBS + 'trk_mpgm_uy_kiyiKenarCizgisi_wms', layers: 'YKDB_kiyiKenarCizgisi', preset: true},
     {id: 'milli', name: 'Milli parklar', type: 'wms', url: TUCBS + 'trk_dkmpgm_milli_parklar_wms', layers: '0', preset: true},
     {id: 'tabpark', name: 'Tabiat parkları', type: 'wms', url: TUCBS + 'trk_dkmpgm_tabiat_parklari_wms', layers: '0', preset: true},
@@ -1416,7 +1413,7 @@ function poleOf(g){
     if (layerObjs[d.id]) return layerObjs[d.id];
     var o;
     if (d.type === 'xyz') o = L.tileLayer(d.url, {maxZoom: 22, maxNativeZoom: 19});
-    else o = L.tileLayer.wms(d.url, {layers: d.layers || '0', styles: d.styles || '', format: 'image/png', transparent: true, version: '1.3.0', maxZoom: 22, attribution: d.name});
+    else o = L.tileLayer.wms(d.url, {layers: d.layers || '0', format: 'image/png', transparent: true, version: '1.3.0', maxZoom: 22, attribution: d.name});
     o._errs = 0;
     o.on('tileerror', function(){ o._errs++; if (o._errs === 3) renderLayerPanel(); });
     o.on('tileload', function(){ if (o._errs) { o._errs = 0; renderLayerPanel(); } });

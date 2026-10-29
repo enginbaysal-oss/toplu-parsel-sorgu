@@ -1395,6 +1395,11 @@ function poleOf(g){
   var LAYERS_KEY = 'parsel-harita-layers-v1';
   var TUCBS = 'https://tucbs-public-api.csb.gov.tr/';
   var PRESET_LAYERS = [
+    {id: 'eplanv', name: 'e-Plan imar planları (ayrıntılı, tüm plan sınıfları)', type: 'wms', url: 'https://tucbs-public-api3.csb.gov.tr/trk_cbsgm_eplanvector_wms', preset: true,
+     layers: (function(){
+       var k = ['tarim', 'kentsel_calisma', 'turizm_alani', 'sosyal_kulturel_alan', 'saglik_tesis_alani', 'egitim_tesis_alani', 'acik_yesil_alan', 'su_yuzeyi', 'enerji_dagitim_depolama', 'teknik_altyapi', 'orman', 'mera', 'sulak_alan', 'arazi_kullanimi_devam_ettirilerek_korunacak_alanlar', 'ozel_kanunlarla_belirlenen_alan', 'afet_hizmet_alani', 'demiryolu'];
+       return ['uip_konut'].concat(k.map(function(x){ return 'uip_' + x; }), ['nip_gelisme_konut'], k.map(function(x){ return 'nip_' + x; }), ['uip_plan_siniri', 'nip_plan_siniri']).join(',');
+     })()},
     {id: 'uip', name: 'Uygulama imar planı (e-Plan, kesinleşmiş)', type: 'wms', url: TUCBS + 'trk_eplan_kesinlesmis_uip_wms', layers: 'tucbs_UIP,tucbsPlanSinir_UIP', preset: true},
     {id: 'nip', name: 'Nazım imar planı (e-Plan, kesinleşmiş)', type: 'wms', url: TUCBS + 'trk_eplan_kesinlesmis_nip_wms', layers: 'tucbs_NIP,tucbsPlanSinir_NIP', preset: true},
     {id: 'cdp-im', name: 'Çevre düzeni planı 1/100.000 (İzmir–Manisa)', type: 'wms', url: TUCBS + 'csb_cdp_im_wms',

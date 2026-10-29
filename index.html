@@ -1400,6 +1400,8 @@ function poleOf(g){
     {id: 'cdp-im', name: 'Çevre düzeni planı 1/100.000 (İzmir–Manisa)', type: 'wms', url: TUCBS + 'csb_cdp_im_wms',
      layers: Array.apply(null, Array(40)).map(function(_, i){ return i; }).join(','), preset: true},
     {id: 'osb', name: 'OSB planları (Organize sanayi bölgeleri)', type: 'wms', url: 'https://ucbp-api.tucbs.gov.tr/geoservice/haritagoruntuleyici/48782/wms/43942a59-453a-4bb8-bcdf-b170e1d3f52c', layers: 'osb_planlari', styles: 'osb_plan_lejant', preset: true},
+    {id: 'orto', name: 'Ortofoto, HGM (doğrudan)', type: 'xyz', url: 'https://atlas.harita.gov.tr/ortofotoservis/{z}/{x}/{y}.jpg', preset: true},
+    {id: 'orto2', name: 'Ortofoto, HGM (TUCBS üzerinden)', type: 'xyz', url: 'https://ucbp-api.tucbs.gov.tr/proxyservice/proxyservice/getByUrl?url=https%3A%2F%2Fatlas.harita.gov.tr%2Fortofotoservis%2F{z}%2F{x}%2F{y}.jpg', preset: true},
     {id: 'kiyi', name: 'Kıyı kenar çizgisi', type: 'wms', url: TUCBS + 'trk_mpgm_uy_kiyiKenarCizgisi_wms', layers: 'YKDB_kiyiKenarCizgisi', preset: true},
     {id: 'milli', name: 'Milli parklar', type: 'wms', url: TUCBS + 'trk_dkmpgm_milli_parklar_wms', layers: '0', preset: true},
     {id: 'tabpark', name: 'Tabiat parkları', type: 'wms', url: TUCBS + 'trk_dkmpgm_tabiat_parklari_wms', layers: '0', preset: true},

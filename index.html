@@ -309,6 +309,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <label class="check"><input type="checkbox" id="outLabels"> Çıktıda ada/parsel etiketlerini göster</label>
       <label class="check"><input type="checkbox" id="outList" checked> PDF'e parsel listesi sayfası ekle</label>
+      <label class="check"><input type="checkbox" id="outMiss" checked> Listeye bulunamayan parselleri de ekle (karşısına not düşülür)</label>
       <button class="primary" id="btnExport" type="button">Çıktı al</button>
       <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Telefonda bellek yetmezse kalite kendiliğinden düşürülüp yeniden denenir.</p>
     </section>
@@ -1793,7 +1794,7 @@ function poleOf(g){
         var pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
         var doc = new JS({orientation: cw >= ch ? 'landscape' : 'portrait', unit: 'mm', format: [pw, ph], compress: true});
         doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
-        if ($('outList').checked) renderTablePages(rows.filter(function(r){ return r.feature || r.status === 'yok' || r.status === 'hata'; }), title).forEach(function(c){
+        if ($('outList').checked) renderTablePages(rows.filter(function(r){ return r.feature || ($('outMiss').checked && (r.status === 'yok' || r.status === 'hata')); }), title).forEach(function(c){
           doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
         });
         await saveBlob('parsel-haritasi-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');

@@ -378,7 +378,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button id="btnKml" type="button" disabled>KML</button>
         <button id="btnCsv" type="button" disabled>CSV</button>
         <button class="ghost" id="btnImport" type="button">Yedekten yükle</button>
-        <input type="file" id="fileImport" accept=".geojson,.json,application/geo+json,application/json" hidden>
+        <input type="file" id="fileImport" hidden>
       </div>
     </section>
 
@@ -1269,9 +1269,12 @@ function poleOf(g){
   }
   function foundRows(){ return rows.filter(function(r){ return r.feature && !r.hidden; }); }
   function geoText(){
-    var fc = {type: 'FeatureCollection', features: foundRows().map(function(r){
+    var fc = {type: 'FeatureCollection', features: rows.filter(function(r){ return r.feature; }).map(function(r){
       var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel, not: r.userNote || ''});
+      if (r.hidden) p.gizli = true;
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
+    }), bulunamayanlar: rows.filter(function(r){ return !r.feature; }).map(function(r){
+      return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null};
     })};
     return JSON.stringify(fc);
   }
@@ -1315,7 +1318,7 @@ function poleOf(g){
     var fr = new FileReader();
     fr.onload = function(){
       try {
-        var j = JSON.parse(fr.result);
+        var j = JSON.parse(String(fr.result).replace(/^\uFEFF/, '').trim());
         var feats = j.type === 'FeatureCollection' ? j.features : j.type === 'Feature' ? [j] : [];
         feats = feats.filter(function(f){ return f && f.geometry && /Polygon/.test(f.geometry.type); });
         if (!feats.length) throw new Error('Dosyada çokgen (Polygon) bulunamadı.');
@@ -1326,8 +1329,14 @@ function poleOf(g){
           var p = f.properties || {};
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
             ada: String(prop(p, ['adaNo', 'ada', 'girdi_ada']) || '-'), parsel: String(prop(p, ['parselNo', 'parsel', 'girdi_parsel']) || (i + 1)),
-            status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null};
+            status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null,
+            hidden: p.gizli === true, userNote: String(p.not || '')};
           rows.push(r); drawRow(r);
+        });
+        (Array.isArray(j.bulunamayanlar) ? j.bulunamayanlar : []).forEach(function(o){
+          rows.push({il: String(o.il || ''), ilce: String(o.ilce || ''), mah: String(o.mah || ''), ada: String(o.ada || ''), parsel: String(o.parsel || ''),
+            status: o.durum === 'hata' ? 'hata' : 'yok', note: o.durum === 'hata' ? 'Yedekten alındı' : '', feature: null, props: null, layer: null,
+            userNote: String(o.not || ''), manualArea: o.elle_alan > 0 ? +o.elle_alan : null});
         });
         showNotice(feats.length + ' parsel yedekten yüklendi (önceki sonuçların yerine).', true); renderTable(); fitAll();
       } catch (err) { showNotice('Dosya açılamadı: ' + err.message); }

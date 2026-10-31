@@ -230,6 +230,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   .layerpanel .ly-del{padding:2px 8px;font-size:12px}
   .layerpanel .lp-add{margin-top:8px;border-top:1px solid #edf1f2;padding-top:6px}
   .layerpanel .lp-add label{display:block;margin:6px 0}
+  .rowtools{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .rowtools button{padding:5px 9px;font-size:13px}
+  .rowtools .danger{color:#b3261e;border-color:#e3b3af}
+  .addrow{margin:6px 0 8px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel)}
+  .addrow textarea{width:100%;font:inherit;font-family:ui-monospace,monospace;padding:6px;box-sizing:border-box}
+  th.acts,td.acts{width:1%;white-space:nowrap;padding-left:4px;padding-right:2px}
+  td.acts .rb{padding:2px 6px;font-size:14px;line-height:1.2;margin:0 1px;min-width:30px}
+  tr.rowhid td:not(.acts){opacity:.45}
+  tr.rowhid td.mono+td{text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -316,9 +325,21 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <div class="sec-h"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
+      <div class="rowtools" id="rowTools">
+        <button type="button" id="btnShowSel">Seçileni göster</button>
+        <button type="button" id="btnHideSel">Seçileni gizle</button>
+        <button type="button" id="btnDelSel" class="danger">Seçileni sil</button>
+        <button type="button" id="btnShowAll" class="ghost">Hepsini göster</button>
+      </div>
+      <details class="addrow">
+        <summary>Parsel ekle</summary>
+        <label class="f">Yeni parsel(ler), her satıra bir tane<textarea id="addText" rows="2" spellcheck="false" placeholder="Mahalle 122 14&#10;ya da: İl İlçe Mahalle Ada Parsel"></textarea></label>
+        <button type="button" id="btnAddRows">Ekle ve sorgula</button>
+        <p class="hint">Listeye eklenir, mevcut parseller silinmez. İl ve ilçe boşsa yukarıdaki varsayılan il/ilçe kullanılır.</p>
+      </details>
       <div class="tablewrap">
         <table>
-          <thead><tr><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th></tr></thead>
+          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
@@ -907,7 +928,7 @@ function poleOf(g){
     r.tip = null;
     var layer = L.geoJSON(r.feature, {renderer: rend, style: function(){ return polyStyle(r); }});
     layer.eachLayer(function(l){ l.on('click', function(e){ selectRow(r, false); showPopup(r, e.latlng); }); });
-    group.addLayer(layer);
+    if (!r.hidden) group.addLayer(layer);
     r.layer = layer;
     applyLabel(r);
   }
@@ -925,7 +946,7 @@ function poleOf(g){
   function colorGroups(list){
     var map = {}, out = [], def = String($('hatchColor').value || '').toLowerCase();
     list.forEach(function(r){
-      if (!r.feature) return;
+      if (!r.feature || r.hidden) return;
       var c = String(r.color || def).toLowerCase();
       if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0}; out.push(map[c]); }
       map[c].n++; map[c].area += areaOf(r);
@@ -933,7 +954,7 @@ function poleOf(g){
     return out;
   }
   function renderColorSum(){
-    var box = $('colorSum'), g = colorGroups(rows), any = rows.some(function(r){ return r.feature && r.color; });
+    var box = $('colorSum'), g = colorGroups(rows), any = rows.some(function(r){ return r.feature && !r.hidden && r.color; });
     if (!box) return;
     if (!any || !g.length) { box.hidden = true; box.innerHTML = ''; return; }
     var tot = g.reduce(function(a, x){ return a + x.area; }, 0), n = g.reduce(function(a, x){ return a + x.n; }, 0);
@@ -947,7 +968,9 @@ function poleOf(g){
     var html = '';
     rows.forEach(function(r, i){
       var area = r.props ? fmtArea(prop(r.props, ['alan', 'tapuAlani', 'yuzolcumu'])) : '';
-      html += '<tr data-i="' + i + '"' + (r === selected ? ' class="sel"' : '') + '>' +
+      html += '<tr data-i="' + i + '" class="' + (r === selected ? 'sel' : '') + (r.hidden ? ' rowhid' : '') + '">' +
+        '<td class="acts">' + (r.feature ? '<button type="button" class="rb rb-eye" title="' + (r.hidden ? 'Haritada göster' : 'Haritada gizle') + '" aria-label="' + (r.hidden ? 'Göster' : 'Gizle') + '">' + (r.hidden ? '🚫' : '👁') + '</button>' : '') +
+        '<button type="button" class="rb rb-del" title="Satırı sil" aria-label="Sil">🗑</button></td>' +
         '<td><input type="checkbox" class="chk" data-i="' + i + '"' + (r.checked ? ' checked' : '') + (r.feature ? '' : ' disabled') + ' aria-label="Parseli seç"></td>' +
         '<td class="mono">' + (i + 1) + (r.color ? '<span class="sw" style="background:' + esc(r.color) + '"></span>' : '') + '</td>' +
         '<td>' + esc(r.mah) + '<span class="why">' + esc(r.ilce) + (r.il ? ', ' + esc(r.il) : '') + '</span></td>' +
@@ -979,7 +1002,8 @@ function poleOf(g){
     var tg = targets();
     $('selInfo').textContent = tg.length ? 'Renk uygulanacak parsel: ' + tg.length + (rows.some(function(r){ return r.checked; }) ? ' (işaretli)' : ' (tabloda seçili satır)') : 'Renk vermek için tabloda parselleri işaretleyin.';
     document.querySelectorAll('.colorbox button, #selColor').forEach(function(b){ b.disabled = !tg.length; });
-    $('legendText').textContent = found ? cnt.bulundu + ' parsel' : 'Sorgulanan parsel';
+    var nVis = rows.filter(function(r){ return r.feature && !r.hidden; }).length, nHid = cnt.bulundu - nVis;
+    $('legendText').textContent = found ? nVis + ' parsel' + (nHid > 0 ? ' (' + nHid + ' gizli)' : '') : 'Sorgulanan parsel';
     saveRowsSoon();
   }
   function selectRow(r, zoom){
@@ -992,6 +1016,9 @@ function poleOf(g){
   $('tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (!tr) return;
     var r = rows[+tr.dataset.i];
+    var bt = e.target.closest('.rb');
+    if (bt && bt.classList.contains('rb-eye')) { setHidden(r, !r.hidden); renderTable(); return; }
+    if (bt && bt.classList.contains('rb-del')) { if (confirm((r.mah || '') + ' ' + r.ada + '/' + r.parsel + ' satırı silinsin mi?')) { deleteRow(r); renderTable(); } return; }
     if (e.target.classList.contains('chk')) { r.checked = e.target.checked; renderTable(); return; }
     selectRow(r, true);
   });
@@ -1017,6 +1044,44 @@ function poleOf(g){
   $('selColor').addEventListener('input', function(){ applyColor(this.value); });
   $('btnApplyColor').addEventListener('click', function(){ applyColor($('selColor').value); });
   $('btnResetColor').addEventListener('click', function(){ applyColor(null); });
+  function setHidden(r, h){
+    r.hidden = !!h;
+    if (!r.layer) return;
+    if (r.hidden) { if (group.hasLayer(r.layer)) group.removeLayer(r.layer); }
+    else if (!group.hasLayer(r.layer)) group.addLayer(r.layer);
+    if (r.hidden && r === selected) { try { map.closePopup(); } catch (e) {} }
+  }
+  function deleteRow(r){
+    if (r.layer && group.hasLayer(r.layer)) group.removeLayer(r.layer);
+    var i = rows.indexOf(r); if (i >= 0) rows.splice(i, 1);
+    if (selected === r) { selected = null; try { map.closePopup(); } catch (e) {} }
+  }
+  function checkedRows(){ var t = rows.filter(function(r){ return r.checked; }); if (!t.length) showNotice('Önce tabloda satırları işaretleyin.'); else showNotice(''); return t; }
+  $('btnShowSel').addEventListener('click', function(){ checkedRows().forEach(function(r){ setHidden(r, false); }); renderTable(); });
+  $('btnHideSel').addEventListener('click', function(){ checkedRows().forEach(function(r){ setHidden(r, true); }); renderTable(); });
+  $('btnShowAll').addEventListener('click', function(){ rows.forEach(function(r){ setHidden(r, false); }); renderTable(); fitAll(); });
+  $('btnDelSel').addEventListener('click', function(){
+    var t = checkedRows(); if (!t.length) return;
+    if (!confirm(t.length + ' satır silinsin mi?')) return;
+    t.forEach(deleteRow); renderTable();
+  });
+  $('btnAddRows').addEventListener('click', function(){
+    if (running) { showNotice('Sorgu sürerken ekleme yapılamaz. Bitmesini bekleyin ya da Durdur\'a basın.'); return; }
+    var parsed = parseList($('addText').value, $('defIl').value.trim(), $('defIlce').value.trim());
+    if (!parsed.length) { showNotice('Eklenecek parseli yazın.'); return; }
+    var key = function(o){ return [o.il, o.ilce, o.mah, o.ada, o.parsel].join('|').toLocaleLowerCase('tr'); };
+    var have = {}; rows.forEach(function(r){ have[key(r)] = 1; });
+    var n = 0, dup = 0;
+    parsed.forEach(function(p){
+      if (have[key(p)]) { dup++; return; }
+      have[key(p)] = 1; n++;
+      rows.push({il: p.il, ilce: p.ilce, mah: p.mah, ada: p.ada, parsel: p.parsel,
+        status: p.parseError ? 'hata' : 'bekliyor', note: p.parseError, feature: null, props: null, layer: null});
+    });
+    $('addText').value = '';
+    if (dup) showNotice(dup + ' parsel zaten listede, atlandı.');
+    renderTable(); if (n) runQueue();
+  });
   function fitAll(){
     if (group.getLayers().length) map.fitBounds(group.getBounds(), {padding: [40, 40], maxZoom: 19});
   }
@@ -1176,7 +1241,7 @@ function poleOf(g){
     a.download = name; document.body.appendChild(a); a.click();
     setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
-  function foundRows(){ return rows.filter(function(r){ return r.feature; }); }
+  function foundRows(){ return rows.filter(function(r){ return r.feature && !r.hidden; }); }
   function geoText(){
     var fc = {type: 'FeatureCollection', features: foundRows().map(function(r){
       var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel});
@@ -1795,7 +1860,7 @@ function poleOf(g){
         var pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
         var doc = new JS({orientation: cw >= ch ? 'landscape' : 'portrait', unit: 'mm', format: [pw, ph], compress: true});
         doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
-        if ($('outList').checked) renderTablePages(rows.filter(function(r){ return r.feature || ($('outMiss').checked && (r.status === 'yok' || r.status === 'hata')); }), title).forEach(function(c){
+        if ($('outList').checked) renderTablePages(rows.filter(function(r){ return (r.feature && !r.hidden) || (!r.feature && $('outMiss').checked && (r.status === 'yok' || r.status === 'hata')); }), title).forEach(function(c){
           doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
         });
         await saveBlob('parsel-haritasi-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');
@@ -1815,7 +1880,7 @@ function poleOf(g){
     try {
       var slim = rows.map(function(r){
         return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
-          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null};
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden};
       });
       localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
     } catch (e) {
@@ -1831,7 +1896,7 @@ function poleOf(g){
         var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
         var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
           status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
-          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null};
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden};
         rows.push(r);
         if (r.feature) drawRow(r);
       });

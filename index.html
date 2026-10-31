@@ -231,6 +231,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   .layerpanel .lp-add{margin-top:8px;border-top:1px solid #edf1f2;padding-top:6px}
   .layerpanel .lp-add label{display:block;margin:6px 0}
   .rowtools{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+  .rowtools .rt-l{align-self:center;font-size:12px;font-weight:700;color:#586a72;min-width:46px}
   .rowtools button{padding:5px 9px;font-size:13px}
   .rowtools .danger{color:#b3261e;border-color:#e3b3af}
   .addrow{margin:6px 0 8px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel)}
@@ -326,10 +327,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     <section>
       <div class="sec-h"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
       <div class="rowtools" id="rowTools">
-        <button type="button" id="btnShowSel">Seçileni göster</button>
-        <button type="button" id="btnHideSel">Seçileni gizle</button>
-        <button type="button" id="btnDelSel" class="danger">Seçileni sil</button>
-        <button type="button" id="btnShowAll" class="ghost">Hepsini göster</button>
+        <span class="rt-l">Tümü</span>
+        <button type="button" id="btnShowAll">Tümünü göster</button>
+        <button type="button" id="btnHideAll">Tümünü gizle</button>
+      </div>
+      <div class="rowtools">
+        <span class="rt-l">Seçili</span>
+        <button type="button" id="btnShowSel">Göster</button>
+        <button type="button" id="btnHideSel">Gizle</button>
+        <button type="button" id="btnDelSel" class="danger">Sil</button>
       </div>
       <details class="addrow">
         <summary>Parsel ekle</summary>
@@ -1060,6 +1066,7 @@ function poleOf(g){
   $('btnShowSel').addEventListener('click', function(){ checkedRows().forEach(function(r){ setHidden(r, false); }); renderTable(); });
   $('btnHideSel').addEventListener('click', function(){ checkedRows().forEach(function(r){ setHidden(r, true); }); renderTable(); });
   $('btnShowAll').addEventListener('click', function(){ rows.forEach(function(r){ setHidden(r, false); }); renderTable(); fitAll(); });
+  $('btnHideAll').addEventListener('click', function(){ rows.forEach(function(r){ setHidden(r, true); }); renderTable(); });
   $('btnDelSel').addEventListener('click', function(){
     var t = checkedRows(); if (!t.length) return;
     if (!confirm(t.length + ' satır silinsin mi?')) return;

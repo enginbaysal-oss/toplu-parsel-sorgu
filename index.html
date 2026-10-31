@@ -240,6 +240,8 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   td.acts .rb{padding:2px 6px;font-size:14px;line-height:1.2;margin:0 1px;min-width:30px}
   tr.rowhid td:not(.acts){opacity:.45}
   tr.rowhid td.mono+td{text-decoration:line-through}
+  input.manarea{width:84px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;text-align:right;box-sizing:border-box}
+  input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -345,7 +347,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </details>
       <div class="tablewrap">
         <table>
-          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th></tr></thead>
+          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th>Not</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
@@ -982,7 +984,9 @@ function poleOf(g){
         '<td>' + esc(r.mah) + '<span class="why">' + esc(r.ilce) + (r.il ? ', ' + esc(r.il) : '') + '</span></td>' +
         '<td class="mono">' + esc(r.ada) + '/' + esc(r.parsel) + '</td>' +
         '<td><span class="chip ' + r.status + '">' + STATUS[r.status] + '</span>' + (r.note ? '<span class="why">' + esc(r.note) + '</span>' : '') + '</td>' +
-        '<td class="num">' + esc(area) + '</td></tr>';
+        '<td class="num">' + (!r.feature && (r.status === 'yok' || r.status === 'hata') ?
+          '<input type="text" class="manarea" inputmode="decimal" placeholder="m² gir" aria-label="Yüzölçümü (elle, m²)" value="' + (r.manualArea ? esc(String(r.manualArea).replace('.', ',')) : '') + '">' : esc(area)) + '</td>' +
+        '<td><input type="text" class="usernote" maxlength="200" placeholder="Not" aria-label="Parsel notu" value="' + esc(r.userNote || '') + '"></td></tr>';
     });
     $('tbody').innerHTML = html;
     $('empty').hidden = rows.length > 0;
@@ -1022,11 +1026,26 @@ function poleOf(g){
   $('tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (!tr) return;
     var r = rows[+tr.dataset.i];
+    if (e.target.classList.contains('manarea') || e.target.classList.contains('usernote')) return;
     var bt = e.target.closest('.rb');
     if (bt && bt.classList.contains('rb-eye')) { setHidden(r, !r.hidden); renderTable(); return; }
     if (bt && bt.classList.contains('rb-del')) { if (confirm((r.mah || '') + ' ' + r.ada + '/' + r.parsel + ' satırı silinsin mi?')) { deleteRow(r); renderTable(); } return; }
     if (e.target.classList.contains('chk')) { r.checked = e.target.checked; renderTable(); return; }
     selectRow(r, true);
+  });
+  $('tbody').addEventListener('change', function(e){
+    if (e.target.classList.contains('usernote')) {
+      var tr0 = e.target.closest('tr'); if (!tr0) return;
+      rows[+tr0.dataset.i].userNote = String(e.target.value || '').trim(); saveRowsSoon(); return;
+    }
+    if (!e.target.classList.contains('manarea')) return;
+    var tr = e.target.closest('tr'); if (!tr) return; var r = rows[+tr.dataset.i];
+    var t = String(e.target.value || '').trim().replace(/\s|m²|m2/gi, '');
+    if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    var n = parseFloat(t);
+    r.manualArea = isFinite(n) && n > 0 ? n : null;
+    renderTable();
   });
   $('chkAll').addEventListener('change', function(){
     var on = this.checked;
@@ -1251,7 +1270,7 @@ function poleOf(g){
   function foundRows(){ return rows.filter(function(r){ return r.feature && !r.hidden; }); }
   function geoText(){
     var fc = {type: 'FeatureCollection', features: foundRows().map(function(r){
-      var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel});
+      var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel, not: r.userNote || ''});
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
     })};
     return JSON.stringify(fc);
@@ -1284,10 +1303,10 @@ function poleOf(g){
   });
   $('btnCsv').addEventListener('click', function(){
     var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
-    var lines = [['İl', 'İlçe', 'Mahalle', 'Ada', 'Parsel', 'Durum', 'Alan (m²)', 'Nitelik', 'Not'].map(q).join(';')];
+    var lines = [['İl', 'İlçe', 'Mahalle', 'Ada', 'Parsel', 'Durum', 'Alan (m²)', 'Nitelik', 'Not', 'Kullanıcı notu'].map(q).join(';')];
     rows.forEach(function(r){
       var p = r.props || {};
-      lines.push([r.il, r.ilce, r.mah, r.ada, r.parsel, STATUS[r.status], prop(p, ['alan']), prop(p, ['nitelik']), r.note].map(q).join(';'));
+      lines.push([r.il, r.ilce, r.mah, r.ada, r.parsel, STATUS[r.status], prop(p, ['alan']) || r.manualArea || '', prop(p, ['nitelik']), r.note, r.userNote || ''].map(q).join(';'));
     });
     download('parsel-sonuclari.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
   });
@@ -1736,10 +1755,15 @@ function poleOf(g){
 
   function renderTablePages(items, title){
     var PW = 1654, PH = 2339, M = 110, RH = 62, HH = 230, pages = [];
-    var cols = [{t: 'Sıra No', w: 110}, {t: 'İl', w: 160}, {t: 'İlçe', w: 190}, {t: 'Mahalle', w: 330}, {t: 'Ada', w: 100}, {t: 'Parsel', w: 110}, {t: 'Yüzölçümü', w: 190}, {t: 'Nitelik', w: 244}];
+    var hasNote = items.some(function(r){ return r.userNote; });
+    var cols = hasNote ?
+      [{t: 'Sıra No', w: 100}, {t: 'İl', w: 120}, {t: 'İlçe', w: 140}, {t: 'Mahalle', w: 220}, {t: 'Ada', w: 80}, {t: 'Parsel', w: 90}, {t: 'Yüzölçümü', w: 220}, {t: 'Nitelik', w: 226}, {t: 'Not', w: 238}] :
+      [{t: 'Sıra No', w: 110}, {t: 'İl', w: 160}, {t: 'İlçe', w: 190}, {t: 'Mahalle', w: 330}, {t: 'Ada', w: 100}, {t: 'Parsel', w: 110}, {t: 'Yüzölçümü', w: 190}, {t: 'Nitelik', w: 244}];
     var per = Math.floor((PH - HH - 70 - M) / RH);
     function areaNum(r){ var v = prop(r.props || {}, ['alan', 'tapuAlani', 'yuzolcumu']); if (v === '' || v == null) return 0; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; }
     var total = items.reduce(function(a, r){ return a + (r.feature ? areaNum(r) : 0); }, 0);
+    var manualSum = items.reduce(function(a, r){ return a + (!r.feature && r.manualArea ? r.manualArea : 0); }, 0);
+    var noAreaMiss = items.filter(function(r){ return !r.feature && !r.manualArea; }).length;
     var nFound = items.filter(function(r){ return r.feature; }).length, nMiss = items.length - nFound;
     var grp = colorGroups(items), anyCol = items.some(function(r){ return r.feature && r.color; });
     var rowsAll = items.concat(nMiss ? [{_total: 1}, {_total: 2}] : [{_total: 1}]).concat(anyCol ? [{_ghead: 1}].concat(grp.map(function(g){ return {_grp: g}; })) : []), np = Math.max(1, Math.ceil(rowsAll.length / per));
@@ -1781,24 +1805,34 @@ function poleOf(g){
           x.fillStyle = '#dfe8ea'; x.fillRect(M, y, PW - 2 * M, RH);
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
           x.fillText(r._total === 2 ? 'Genel toplam (' + items.length + ' parsel, bulunamayanlar dahil)' : (nMiss ? 'Bulunan parsellerin toplamı (' : 'Toplam (') + nFound + ' parsel)', M + cols[0].w + 8, y + RH / 2);
-          x.fillText(fmtArea(total) + (r._total === 2 ? '*' : ''), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
+          x.fillText(fmtArea(r._total === 2 ? total + manualSum : total) + (r._total === 2 && noAreaMiss ? '*' : ''), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
         }
         if (i % 2) { x.fillStyle = '#f3f6f7'; x.fillRect(M, y, PW - 2 * M, RH); }
         var p = r.props || {};
-        var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik'])];
+        var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik']), r.userNote || ''];
         var miss = !r.feature;
-        if (miss) { vals[6] = ''; vals[7] = r.status === 'yok' ? 'BULUNAMADI' : 'SORGULANAMADI'; x.fillStyle = '#fdecea'; x.fillRect(M, y, PW - 2 * M, RH); }
+        if (miss) { vals[6] = r.manualArea ? fmtArea(r.manualArea) + ' (elle)' : ''; vals[7] = r.status === 'yok' ? 'BULUNAMADI' : 'SORGULANAMADI'; x.fillStyle = '#fdecea'; x.fillRect(M, y, PW - 2 * M, RH); }
         cols.forEach(function(col, k){
           x.fillStyle = (miss && k === 7) ? '#b3261e' : '#15262d';
-          x.font = (miss && k === 7 ? '700 ' : '400 ') + '24px system-ui, Arial, sans-serif';
+          if (hasNote && k === cols.length - 1) {
+            x.font = '400 20px system-ui, Arial, sans-serif';
+            var words = String(vals[k] || '').split(/\s+/).filter(Boolean), l1 = '', l2 = '', wi = 0;
+            for (; wi < words.length; wi++) { var tt = l1 ? l1 + ' ' + words[wi] : words[wi]; if (x.measureText(tt).width > col.w - 16 && l1) break; l1 = tt; }
+            l2 = words.slice(wi).join(' ');
+            if (l2) { x.fillText(fit(x, l1, col.w), cx + 8, y + RH / 2 - 12); x.fillText(fit(x, l2, col.w), cx + 8, y + RH / 2 + 12); }
+            else x.fillText(fit(x, l1, col.w), cx + 8, y + RH / 2);
+            x.font = '400 24px system-ui, Arial, sans-serif';
+            cx += col.w; return;
+          }
+          x.font = (miss && k === 7 ? '700 22px' : '400 24px') + ' system-ui, Arial, sans-serif';
           x.fillText(fit(x, vals[k], col.w), cx + 8, y + RH / 2); cx += col.w;
         });
         x.font = '400 24px system-ui, Arial, sans-serif';
       });
       x.fillStyle = '#586a72'; x.font = '400 22px system-ui, Arial, sans-serif'; x.textAlign = 'center';
-      if (nMiss && pg === np - 1) { x.textAlign = 'left'; x.fillText('* Bulunamayan ' + nMiss + ' parselin yüzölçümü bilinmediği için toplama yalnızca bulunan parseller yansır.', M, PH - 90); x.textAlign = 'center'; }
+      if (nMiss && pg === np - 1 && (noAreaMiss || manualSum)) { x.textAlign = 'left'; x.fillText(noAreaMiss ? '* Yüzölçümü girilmeyen ' + noAreaMiss + ' bulunamayan parsel toplama dahil değildir.' : 'Bulunamayan parsellerin yüzölçümü elle girilmiştir.', M, PH - 90); x.textAlign = 'center'; }
       x.fillText('Sınırlar TKGM Parsel Sorgu verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez.  ·  Sayfa ' + (pg + 2), PW / 2, PH - 50);
       pages.push(c);
     }
@@ -1887,7 +1921,7 @@ function poleOf(g){
     try {
       var slim = rows.map(function(r){
         return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
-          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden};
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || ''};
       });
       localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
     } catch (e) {
@@ -1903,7 +1937,7 @@ function poleOf(g){
         var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
         var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
           status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
-          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden};
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || ''};
         rows.push(r);
         if (r.feature) drawRow(r);
       });

@@ -242,6 +242,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   tr.rowhid td.mono+td{text-decoration:line-through}
   input.manarea{width:84px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;text-align:right;box-sizing:border-box}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
+  .mu{font-size:12px;color:#586a72}
 </style>
 </head>
 <body>
@@ -985,7 +986,7 @@ function poleOf(g){
         '<td class="mono">' + esc(r.ada) + '/' + esc(r.parsel) + '</td>' +
         '<td><span class="chip ' + r.status + '">' + STATUS[r.status] + '</span>' + (r.note ? '<span class="why">' + esc(r.note) + '</span>' : '') + '</td>' +
         '<td class="num">' + (!r.feature && (r.status === 'yok' || r.status === 'hata') ?
-          '<input type="text" class="manarea" inputmode="decimal" placeholder="m² gir" aria-label="Yüzölçümü (elle, m²)" value="' + (r.manualArea ? esc(String(r.manualArea).replace('.', ',')) : '') + '">' : esc(area)) + '</td>' +
+          '<input type="text" class="manarea" inputmode="decimal" placeholder="alan" aria-label="Yüzölçümü (elle, m²)" value="' + (r.manualArea ? esc(String(r.manualArea).replace('.', ',')) : '') + '"> <span class="mu">m²</span>' : esc(area)) + '</td>' +
         '<td><input type="text" class="usernote" maxlength="200" placeholder="Not" aria-label="Parsel notu" value="' + esc(r.userNote || '') + '"></td></tr>';
     });
     $('tbody').innerHTML = html;

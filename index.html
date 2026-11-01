@@ -388,6 +388,9 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
           <button id="btnApplyColor" type="button">Seçiliye uygula</button>
           <button class="ghost" id="btnResetColor" type="button">Varsayılan renge dön</button>
         </div>
+        <label class="f">Dolgu deseni (işaretli/seçili parsellere)
+          <select id="selHatch"></select>
+        </label>
       </div>
       <div class="row">
         <button id="btnRetry" type="button" disabled>Hatalıları yeniden dene</button>
@@ -738,8 +741,8 @@ function poleOf(g){
   function hMul(s){ return s === 'sik' ? 0.55 : s === 'seyrek' ? 1.8 : 1; }
   function hRot(s){ var k = hKind(s); return k === 'd' ? (s === 'ters' ? -45 : 45) : k === 'dd' ? 45 : 0; }
   function hSolid(s){ return s === 'dolgu' ? 0.35 : s === 'hafif' ? 0.18 : 0; }
-  function patSvg(c){
-    var s = $('hatchStyle').value, id = 'ph' + hexOf(c), k = hKind(s), m = hMul(s);
+  function patSvg(c, s){
+    var id = 'ph' + hexOf(c) + '_' + s, k = hKind(s), m = hMul(s);
     var size = (k === 'dd' ? 10 : k === 'dot' ? 8 : 9) * m, w = (s === 'sik' ? 1.6 : 2);
     var V = '<line x1="0" y1="0" x2="0" y2="' + size + '" stroke="' + c + '" stroke-width="' + w + '"/>';
     var H = '<line x1="0" y1="0" x2="' + size + '" y2="0" stroke="' + c + '" stroke-width="' + w + '"/>';
@@ -747,11 +750,13 @@ function poleOf(g){
     return '<pattern id="' + id + '" patternUnits="userSpaceOnUse" width="' + size + '" height="' + size + '" patternTransform="rotate(' + hRot(s) + ')">' +
       '<rect width="' + size + '" height="' + size + '" fill="' + c + '" fill-opacity="0.12"/>' + body + '</pattern>';
   }
-  function ensurePattern(c){
-    var id = 'ph' + hexOf(c);
-    if (!defs.querySelector('#' + id)) defs.insertAdjacentHTML('beforeend', patSvg(c));
+  function ensurePattern(c, st){
+    st = st || $('hatchStyle').value;
+    var id = 'ph' + hexOf(c) + '_' + st;
+    if (!defs.querySelector('#' + id)) defs.insertAdjacentHTML('beforeend', patSvg(c, st));
     return id;
   }
+  function hatchOf(r){ return (r && r.hatch) || $('hatchStyle').value; }
   function buildLegend(){
     var c = $('hatchColor').value, s = $('hatchStyle').value, k = hKind(s);
     var lg = $('lgPat'); if (!lg) return;
@@ -766,8 +771,8 @@ function poleOf(g){
   function buildPattern(){ defs.innerHTML = ''; ensurePattern($('hatchColor').value); buildLegend(); }
   function lineOf(r){ return (r && (r.lineColor || r.color)) || $('hatchColor').value; }
   function polyStyle(r){
-    var c = (r && r.color) || $('hatchColor').value, st = $('hatchStyle').value, sol = hSolid(st);
-    var id = ensurePattern(c);
+    var c = (r && r.color) || $('hatchColor').value, st = hatchOf(r), sol = hSolid(st);
+    var id = ensurePattern(c, st);
     return {color: lineOf(r), weight: 2.5, opacity: 1, lineJoin: 'round',
       fillColor: (sol || st === 'bos') ? c : 'url(#' + id + ')', fillOpacity: st === 'bos' ? 0 : sol ? sol : 1};
   }
@@ -909,6 +914,7 @@ function poleOf(g){
         '<button type="button" class="rst" data-c="">' + (kind === 'line' ? 'Dolguyla aynı' : 'Varsayılan') + '</button></div>';
     }
     out += swRow('fill', 'Dolgu rengi', r.color || $('hatchColor').value) + swRow('line', 'Çizgi rengi', lineOf(r)) +
+      '<div class="pcs-t">Dolgu deseni</div><select class="phatch" style="width:100%;padding:7px;border:1px solid #8a979c;border-radius:5px;font:inherit">' + hatchOpts(r.hatch || '', 'Genel ayar') + '</select>' +
       '<button type="button" class="pclose">Kapat</button>';
     return out;
   }
@@ -923,6 +929,8 @@ function poleOf(g){
     if (!el || !r) return;
     var cb = el.querySelector('.pclose');
     if (cb) cb.addEventListener('click', function(){ map.closePopup(); });
+    var hs = el.querySelector('.phatch');
+    if (hs) hs.addEventListener('change', function(){ setHatchOf(r, hs.value); renderTable(); saveRows(); });
     el.querySelectorAll('.pcs').forEach(function(box){
       var kind = box.dataset.k;
       function go(col){ setColorOf(r, col, kind === 'line' ? 'line' : 'fill'); renderTable(); }
@@ -1093,6 +1101,17 @@ function poleOf(g){
     if (r.layer) r.layer.setStyle(polyStyle(r));
     raiseBlack();
   }
+  function hatchValid(v){ return !!v && !!$('hatchStyle').querySelector('option[value="' + v + '"]'); }
+  function hatchOpts(cur, defLabel){
+    return '<option value="">' + defLabel + '</option>' + $('hatchStyle').innerHTML.replace(/ selected(="[^"]*")?/g, '').replace('value="' + cur + '"', 'value="' + cur + '" selected');
+  }
+  function setHatchOf(r, v){ r.hatch = v || null; if (r.layer) r.layer.setStyle(polyStyle(r)); raiseBlack(); }
+  $('selHatch').innerHTML = hatchOpts('', 'Genel ayar (Tarama seçeneği)');
+  $('selHatch').addEventListener('change', function(){
+    var t = targets(); if (!t.length) return;
+    var v = this.value; t.forEach(function(r){ setHatchOf(r, v); });
+    renderTable(); saveRows();
+  });
   function applyColor(col){
     var t = targets(); if (!t.length) return;
     var mode = colorMode();
@@ -1310,6 +1329,7 @@ function poleOf(g){
       var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel, not: r.userNote || ''});
       if (r.hidden) p.gizli = true;
       if (r.lineColor) p.cizgi_renk = r.lineColor;
+      if (r.hatch) p.tarama = r.hatch;
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
     }), bulunamayanlar: rows.filter(function(r){ return !r.feature; }).map(function(r){
       return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null};
@@ -1368,7 +1388,7 @@ function poleOf(g){
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
             ada: String(prop(p, ['adaNo', 'ada', 'girdi_ada']) || '-'), parsel: String(prop(p, ['parselNo', 'parsel', 'girdi_parsel']) || (i + 1)),
             status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null,
-            hidden: p.gizli === true, userNote: String(p.not || ''), lineColor: /^#[0-9a-fA-F]{6}$/.test(p.cizgi_renk || '') ? p.cizgi_renk : null};
+            hidden: p.gizli === true, userNote: String(p.not || ''), lineColor: /^#[0-9a-fA-F]{6}$/.test(p.cizgi_renk || '') ? p.cizgi_renk : null, hatch: hatchValid(p.tarama) ? p.tarama : null};
           rows.push(r); drawRow(r);
         });
         (Array.isArray(j.bulunamayanlar) ? j.bulunamayanlar : []).forEach(function(o){
@@ -1676,7 +1696,7 @@ function poleOf(g){
     var u = Math.max(1, W / 1800), hH = Math.round(120 * u), fH = Math.round(100 * u);
     var style = $('hatchStyle').value, globalColor = $('hatchColor').value, hs = Math.round(14 * u);
     var tiny = document.createElement('canvas').getContext('2d'), pat = {};
-    items.forEach(function(r){ var c = r.color || globalColor; if (!pat[c]) pat[c] = hatchPattern(tiny, c, style, hs, Math.max(2, 2 * u)); });
+    items.forEach(function(r){ var c = r.color || globalColor, st = r.hatch || style; if (!pat[c + '|' + st]) pat[c + '|' + st] = hatchPattern(tiny, c, st, hs, Math.max(2, 2 * u)); });
     var footPat = hatchPattern(tiny, globalColor, style, Math.round(10 * u), Math.max(2, 1.6 * u));
     var cv = document.createElement('canvas'); cv.width = W; cv.height = H + hH + fH;
     var ctx = cv.getContext('2d');
@@ -1723,7 +1743,7 @@ function poleOf(g){
         ring.forEach(function(c, i){ var q = P(c[0], c[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
         ctx.closePath();
       }); });
-      ctx.fillStyle = pat[color]; ctx.fill('evenodd');
+      ctx.fillStyle = pat[color + '|' + (r.hatch || style)]; ctx.fill('evenodd');
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw + 3 * u; ctx.stroke();
       ctx.strokeStyle = lcol; ctx.lineWidth = lw; ctx.stroke();
     });
@@ -1972,7 +1992,7 @@ function poleOf(g){
     try {
       var slim = rows.map(function(r){
         return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
-          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || '', lineColor: r.lineColor || null};
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || '', lineColor: r.lineColor || null, hatch: r.hatch || null};
       });
       localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
     } catch (e) {
@@ -1988,7 +2008,7 @@ function poleOf(g){
         var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
         var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
           status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
-          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || '', lineColor: o.lineColor || null};
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || '', lineColor: o.lineColor || null, hatch: o.hatch || null};
         rows.push(r);
         if (r.feature) drawRow(r);
       });

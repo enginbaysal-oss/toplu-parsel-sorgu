@@ -404,7 +404,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 01.11 · dolgu deseni</summary>
+        <summary>Ayarlar · sürüm 01.11 · hassas yakınlaştırma</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -695,7 +695,7 @@ function poleOf(g){
   var LS = 'parsel-harita-v1';
 
   /* ---------- harita ---------- */
-  var map = L.map('map', {maxZoom: 21}).setView([39.0, 35.2], 6);
+  var map = L.map('map', {maxZoom: 21, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoom: 100}).setView([39.0, 35.2], 6);
   var ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
   var tiles = {
     street: L.tileLayer(ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom: 19, maxZoom: 21, attribution: 'Esri, HERE, Garmin, OpenStreetMap katkıda bulunanlar'}),

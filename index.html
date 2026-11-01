@@ -762,9 +762,12 @@ function poleOf(g){
     return {color: lineOf(r), weight: 2.5, opacity: 1, lineJoin: 'round',
       fillColor: solid ? c : 'url(#' + id + ')', fillOpacity: solid ? 0.35 : 1};
   }
+  function isBlack(r){ return String(lineOf(r)).toLowerCase() === '#000000'; }
+  function raiseBlack(){ (rows || []).forEach(function(r){ if (r.layer && !r.hidden && isBlack(r) && group.hasLayer(r.layer)) r.layer.bringToFront(); }); }
   function restyle(){
     buildPattern();
     (rows || []).forEach(function(r){ if (r.layer) r.layer.setStyle(polyStyle(r)); });
+    raiseBlack();
   }
 
   /* ---------- durum ---------- */
@@ -954,6 +957,7 @@ function poleOf(g){
     if (!r.hidden) group.addLayer(layer);
     r.layer = layer;
     applyLabel(r);
+    if (isBlack(r)) raiseBlack();
   }
 
   /* ---------- tablo ---------- */
@@ -1078,6 +1082,7 @@ function poleOf(g){
     else if (mode === 'fill') { if (!r.lineColor && col) r.lineColor = lineOf(r); r.color = col; if (!col) r.lineColor = r.lineColor || null; }
     else { r.lineColor = col || null; }
     if (r.layer) r.layer.setStyle(polyStyle(r));
+    raiseBlack();
   }
   function applyColor(col){
     var t = targets(); if (!t.length) return;
@@ -1698,7 +1703,7 @@ function poleOf(g){
     var P = function(lng, lat){ var w = worldPx(lng, lat, z); return [w.x - ox, w.y - oy + hH]; };
     var lw = Math.max(3, 3.2 * u);
     ctx.save(); ctx.beginPath(); ctx.rect(0, hH, W, H); ctx.clip();
-    items.forEach(function(r){
+    items.slice().sort(function(a, b){ return (isBlack(a) ? 1 : 0) - (isBlack(b) ? 1 : 0); }).forEach(function(r){
       var color = r.color || globalColor, lcol = r.lineColor || color;
       ctx.beginPath();
       ringsOf(r.feature.geometry).forEach(function(poly){ poly.forEach(function(ring){

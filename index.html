@@ -243,6 +243,9 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   input.manarea{width:84px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;text-align:right;box-sizing:border-box}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
   .mu{font-size:12px;color:#586a72}
+  .cmode{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:14px}
+  .cmode label{display:flex;align-items:center;gap:4px;cursor:pointer}
+  .pcs-t{margin-top:10px;font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
@@ -356,6 +359,11 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <div class="colorsum" id="colorSum" hidden></div>
       <div class="colorbox">
         <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
+        <div class="cmode" role="radiogroup" aria-label="Rengin uygulanacağı yer">
+          <label><input type="radio" name="colorMode" value="both" checked> Çizgi + dolgu</label>
+          <label><input type="radio" name="colorMode" value="fill"> Yalnız dolgu</label>
+          <label><input type="radio" name="colorMode" value="line"> Yalnız çizgi</label>
+        </div>
         <div class="swatches" id="swatches">
           <button class="s" type="button" data-c="#e0301e" style="background:#e0301e" aria-label="Kırmızı"></button>
           <button class="s" type="button" data-c="#f08a00" style="background:#f08a00" aria-label="Turuncu"></button>
@@ -747,10 +755,11 @@ function poleOf(g){
     r.setAttribute('fill-opacity', s === 'dolgu' ? '0.35' : '1');
   }
   function buildPattern(){ defs.innerHTML = ''; ensurePattern($('hatchColor').value); buildLegend(); }
+  function lineOf(r){ return (r && (r.lineColor || r.color)) || $('hatchColor').value; }
   function polyStyle(r){
     var c = (r && r.color) || $('hatchColor').value, solid = $('hatchStyle').value === 'dolgu';
     var id = ensurePattern(c);
-    return {color: c, weight: 2.5, opacity: 1, lineJoin: 'round',
+    return {color: lineOf(r), weight: 2.5, opacity: 1, lineJoin: 'round',
       fillColor: solid ? c : 'url(#' + id + ')', fillOpacity: solid ? 0.35 : 1};
   }
   function restyle(){
@@ -881,10 +890,13 @@ function poleOf(g){
         '<a href="https://maps.apple.com/?daddr=' + q + '" target="_blank" rel="noopener">Apple</a></div>';
     }
     var cols = ['#e0301e','#f08a00','#f2d600','#1fa34a','#12b5cb','#2c5fe0','#8a3ffc','#ffffff','#000000'];
-    out += '<div style="margin-top:10px">Parsel rengi:</div><div class="pcs">' +
-      cols.map(function(c){ return '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="Renk ' + c + '"></button>'; }).join('') +
-      '<input type="color" value="' + (r.color || $('hatchColor').value) + '" aria-label="Özel renk">' +
-      '<button type="button" class="rst" data-c="">Varsayılan</button></div>' +
+    function swRow(kind, title, cur){
+      return '<div class="pcs-t">' + title + '</div><div class="pcs" data-k="' + kind + '">' +
+        cols.map(function(c){ return '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="' + title + ' ' + c + '"></button>'; }).join('') +
+        '<input type="color" value="' + cur + '" aria-label="' + title + ' özel">' +
+        '<button type="button" class="rst" data-c="">' + (kind === 'line' ? 'Dolguyla aynı' : 'Varsayılan') + '</button></div>';
+    }
+    out += swRow('fill', 'Dolgu rengi', r.color || $('hatchColor').value) + swRow('line', 'Çizgi rengi', lineOf(r)) +
       '<button type="button" class="pclose">Kapat</button>';
     return out;
   }
@@ -899,15 +911,17 @@ function poleOf(g){
     if (!el || !r) return;
     var cb = el.querySelector('.pclose');
     if (cb) cb.addEventListener('click', function(){ map.closePopup(); });
-    var box = el.querySelector('.pcs'); if (!box) return;
-    function go(col){ r.color = col; if (r.layer) r.layer.setStyle(polyStyle(r)); renderTable(); }
-    box.addEventListener('click', function(e){
-      var b = e.target.closest('button'); if (!b) return;
-      go(b.dataset.c || null);
-      var ci = box.querySelector('input'); if (ci && b.dataset.c) ci.value = b.dataset.c;
+    el.querySelectorAll('.pcs').forEach(function(box){
+      var kind = box.dataset.k;
+      function go(col){ setColorOf(r, col, kind === 'line' ? 'line' : 'fill'); renderTable(); }
+      box.addEventListener('click', function(e){
+        var b = e.target.closest('button'); if (!b) return;
+        go(b.dataset.c || null);
+        var ci = box.querySelector('input'); if (ci && b.dataset.c) ci.value = b.dataset.c;
+      });
+      var ci = box.querySelector('input');
+      if (ci) ci.addEventListener('input', function(){ go(ci.value); });
     });
-    var ci = box.querySelector('input');
-    if (ci) ci.addEventListener('input', function(){ go(ci.value); });
   });
   map.on('popupclose', function(){ $('mapwrap').classList.remove('popup-open'); });
   function sizeTip(r){
@@ -981,7 +995,7 @@ function poleOf(g){
         '<td class="acts">' + (r.feature ? '<button type="button" class="rb rb-eye" title="' + (r.hidden ? 'Haritada göster' : 'Haritada gizle') + '" aria-label="' + (r.hidden ? 'Göster' : 'Gizle') + '">' + (r.hidden ? '🚫' : '👁') + '</button>' : '') +
         '<button type="button" class="rb rb-del" title="Satırı sil" aria-label="Sil">🗑</button></td>' +
         '<td><input type="checkbox" class="chk" data-i="' + i + '"' + (r.checked ? ' checked' : '') + (r.feature ? '' : ' disabled') + ' aria-label="Parseli seç"></td>' +
-        '<td class="mono">' + (i + 1) + (r.color ? '<span class="sw" style="background:' + esc(r.color) + '"></span>' : '') + '</td>' +
+        '<td class="mono">' + (i + 1) + ((r.color || r.lineColor) ? '<span class="sw" style="background:' + esc(r.color || $('hatchColor').value) + (r.lineColor ? ';border:2px solid ' + esc(r.lineColor) : '') + '"></span>' : '') + '</td>' +
         '<td>' + esc(r.mah) + '<span class="why">' + esc(r.ilce) + (r.il ? ', ' + esc(r.il) : '') + '</span></td>' +
         '<td class="mono">' + esc(r.ada) + '/' + esc(r.parsel) + '</td>' +
         '<td><span class="chip ' + r.status + '">' + STATUS[r.status] + '</span>' + (r.note ? '<span class="why">' + esc(r.note) + '</span>' : '') + '</td>' +
@@ -1058,9 +1072,17 @@ function poleOf(g){
     if (c.length) return c;
     return selected && selected.feature ? [selected] : [];
   }
+  function colorMode(){ var m = document.querySelector('input[name=colorMode]:checked'); return m ? m.value : 'both'; }
+  function setColorOf(r, col, mode){
+    if (mode === 'both') { r.color = col; r.lineColor = null; }
+    else if (mode === 'fill') { if (!r.lineColor && col) r.lineColor = lineOf(r); r.color = col; if (!col) r.lineColor = r.lineColor || null; }
+    else { r.lineColor = col || null; }
+    if (r.layer) r.layer.setStyle(polyStyle(r));
+  }
   function applyColor(col){
     var t = targets(); if (!t.length) return;
-    t.forEach(function(r){ r.color = col; if (r.layer) r.layer.setStyle(polyStyle(r)); });
+    var mode = colorMode();
+    t.forEach(function(r){ setColorOf(r, col, mode); });
     renderTable();
   }
   $('swatches').addEventListener('click', function(e){
@@ -1273,6 +1295,7 @@ function poleOf(g){
     var fc = {type: 'FeatureCollection', features: rows.filter(function(r){ return r.feature; }).map(function(r){
       var p = Object.assign({}, r.props, {renk: r.color || $('hatchColor').value, girdi_il: r.il, girdi_ilce: r.ilce, girdi_mahalle: r.mah, girdi_ada: r.ada, girdi_parsel: r.parsel, not: r.userNote || ''});
       if (r.hidden) p.gizli = true;
+      if (r.lineColor) p.cizgi_renk = r.lineColor;
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
     }), bulunamayanlar: rows.filter(function(r){ return !r.feature; }).map(function(r){
       return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null};
@@ -1299,7 +1322,7 @@ function poleOf(g){
       var g = r.feature.geometry, geom = '';
       if (g.type === 'Polygon') geom = polyKml(g.coordinates);
       else if (g.type === 'MultiPolygon') geom = '<MultiGeometry>' + g.coordinates.map(polyKml).join('') + '</MultiGeometry>';
-      return '<Placemark><name>' + esc(r.ada) + '/' + esc(r.parsel) + '</name><description>' + esc(r.mah + ', ' + r.ilce + ', ' + r.il) + '</description>'+ '<Style><LineStyle><color>' + kmlColor(r.color || $('hatchColor').value, 'ff') + '</color><width>2.5</width></LineStyle><PolyStyle><color>' + kmlColor(r.color || $('hatchColor').value, '59') + '</color></PolyStyle></Style>' + geom + '</Placemark>';
+      return '<Placemark><name>' + esc(r.ada) + '/' + esc(r.parsel) + '</name><description>' + esc(r.mah + ', ' + r.ilce + ', ' + r.il) + '</description>'+ '<Style><LineStyle><color>' + kmlColor(r.lineColor || r.color || $('hatchColor').value, 'ff') + '</color><width>2.5</width></LineStyle><PolyStyle><color>' + kmlColor(r.color || $('hatchColor').value, '59') + '</color></PolyStyle></Style>' + geom + '</Placemark>';
     }).join('');
     var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Parseller</name>' +
       pm + '</Document></kml>';
@@ -1331,7 +1354,7 @@ function poleOf(g){
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
             ada: String(prop(p, ['adaNo', 'ada', 'girdi_ada']) || '-'), parsel: String(prop(p, ['parselNo', 'parsel', 'girdi_parsel']) || (i + 1)),
             status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null,
-            hidden: p.gizli === true, userNote: String(p.not || '')};
+            hidden: p.gizli === true, userNote: String(p.not || ''), lineColor: /^#[0-9a-fA-F]{6}$/.test(p.cizgi_renk || '') ? p.cizgi_renk : null};
           rows.push(r); drawRow(r);
         });
         (Array.isArray(j.bulunamayanlar) ? j.bulunamayanlar : []).forEach(function(o){
@@ -1676,7 +1699,7 @@ function poleOf(g){
     var lw = Math.max(3, 3.2 * u);
     ctx.save(); ctx.beginPath(); ctx.rect(0, hH, W, H); ctx.clip();
     items.forEach(function(r){
-      var color = r.color || globalColor;
+      var color = r.color || globalColor, lcol = r.lineColor || color;
       ctx.beginPath();
       ringsOf(r.feature.geometry).forEach(function(poly){ poly.forEach(function(ring){
         ring.forEach(function(c, i){ var q = P(c[0], c[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
@@ -1684,7 +1707,7 @@ function poleOf(g){
       }); });
       ctx.fillStyle = pat[color]; ctx.fill('evenodd');
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw + 3 * u; ctx.stroke();
-      ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.stroke();
+      ctx.strokeStyle = lcol; ctx.lineWidth = lw; ctx.stroke();
     });
     // etiketler: parselin içinde (sığarsa), sığmazsa çakışmayan boş bir yerde, çizgiyle bağlı
     if (o.labels) {
@@ -1931,7 +1954,7 @@ function poleOf(g){
     try {
       var slim = rows.map(function(r){
         return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
-          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || ''};
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || '', lineColor: r.lineColor || null};
       });
       localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
     } catch (e) {
@@ -1947,7 +1970,7 @@ function poleOf(g){
         var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
         var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
           status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
-          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || ''};
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || '', lineColor: o.lineColor || null};
         rows.push(r);
         if (r.feature) drawRow(r);
       });

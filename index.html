@@ -298,7 +298,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
             <option value="capraz">Çapraz çizgili</option>
             <option value="cift">Çift yönlü</option>
             <option value="yatay">Yatay çizgili</option>
+            <option value="ters">Ters çapraz çizgili</option>
+            <option value="sik">Sık çapraz çizgili</option>
+            <option value="seyrek">Seyrek çapraz çizgili</option>
+            <option value="dikey">Dikey çizgili</option>
+            <option value="kare">Kareli</option>
+            <option value="nokta">Noktalı</option>
+            <option value="hafif">Açık dolgu</option>
             <option value="dolgu">Düz dolgu</option>
+            <option value="bos">İçi boş (sadece çerçeve)</option>
           </select>
         </label>
         <label class="f">Renk<input type="color" id="hatchColor" value="#e0301e"></label>
@@ -726,16 +734,18 @@ function poleOf(g){
   map.on('zoomend', syncLabelZoom); syncLabelZoom();
 
   function hexOf(c){ return String(c).replace('#', ''); }
+  function hKind(s){ return {yatay:'h', dikey:'v', kare:'g', nokta:'dot', cift:'dd'}[s] || 'd'; }
+  function hMul(s){ return s === 'sik' ? 0.55 : s === 'seyrek' ? 1.8 : 1; }
+  function hRot(s){ var k = hKind(s); return k === 'd' ? (s === 'ters' ? -45 : 45) : k === 'dd' ? 45 : 0; }
+  function hSolid(s){ return s === 'dolgu' ? 0.35 : s === 'hafif' ? 0.18 : 0; }
   function patSvg(c){
-    var s = $('hatchStyle').value, id = 'ph' + hexOf(c);
-    var lines = {
-      capraz: '<line x1="0" y1="0" x2="0" y2="9" stroke="' + c + '" stroke-width="2"/>',
-      cift: '<line x1="0" y1="0" x2="0" y2="10" stroke="' + c + '" stroke-width="1.6"/><line x1="0" y1="0" x2="10" y2="0" stroke="' + c + '" stroke-width="1.6"/>',
-      yatay: '<line x1="0" y1="0" x2="9" y2="0" stroke="' + c + '" stroke-width="2"/>'
-    };
-    var size = s === 'cift' ? 10 : 9, rot = s === 'yatay' ? 0 : 45;
-    return '<pattern id="' + id + '" patternUnits="userSpaceOnUse" width="' + size + '" height="' + size + '" patternTransform="rotate(' + rot + ')">' +
-      '<rect width="' + size + '" height="' + size + '" fill="' + c + '" fill-opacity="0.12"/>' + (lines[s] || '') + '</pattern>';
+    var s = $('hatchStyle').value, id = 'ph' + hexOf(c), k = hKind(s), m = hMul(s);
+    var size = (k === 'dd' ? 10 : k === 'dot' ? 8 : 9) * m, w = (s === 'sik' ? 1.6 : 2);
+    var V = '<line x1="0" y1="0" x2="0" y2="' + size + '" stroke="' + c + '" stroke-width="' + w + '"/>';
+    var H = '<line x1="0" y1="0" x2="' + size + '" y2="0" stroke="' + c + '" stroke-width="' + w + '"/>';
+    var body = k === 'h' ? H : k === 'g' || k === 'dd' ? V + H : k === 'dot' ? '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="1.9" fill="' + c + '"/>' : V;
+    return '<pattern id="' + id + '" patternUnits="userSpaceOnUse" width="' + size + '" height="' + size + '" patternTransform="rotate(' + hRot(s) + ')">' +
+      '<rect width="' + size + '" height="' + size + '" fill="' + c + '" fill-opacity="0.12"/>' + body + '</pattern>';
   }
   function ensurePattern(c){
     var id = 'ph' + hexOf(c);
@@ -743,24 +753,23 @@ function poleOf(g){
     return id;
   }
   function buildLegend(){
-    var c = $('hatchColor').value, s = $('hatchStyle').value, rot = s === 'yatay' ? 0 : 45;
+    var c = $('hatchColor').value, s = $('hatchStyle').value, k = hKind(s);
     var lg = $('lgPat'); if (!lg) return;
-    lg.setAttribute('patternTransform', 'rotate(' + rot + ')');
-    lg.innerHTML = s === 'yatay' ? '<line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.6"/>'
-      : s === 'cift' ? '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.4"/><line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.4"/>'
-      : '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.6"/>';
-    var r = $('legend').querySelector('rect');
+    lg.setAttribute('patternTransform', 'rotate(' + hRot(s) + ')');
+    var V = '<line x1="0" y1="0" x2="0" y2="6" stroke="' + c + '" stroke-width="1.5"/>', H = '<line x1="0" y1="0" x2="6" y2="0" stroke="' + c + '" stroke-width="1.5"/>';
+    lg.innerHTML = k === 'h' ? H : k === 'g' || k === 'dd' ? V + H : k === 'dot' ? '<circle cx="3" cy="3" r="1.2" fill="' + c + '"/>' : V;
+    var r = $('legend').querySelector('rect'), sol = hSolid(s);
     r.setAttribute('stroke', c);
-    r.setAttribute('fill', s === 'dolgu' ? c : 'url(#lgPat)');
-    r.setAttribute('fill-opacity', s === 'dolgu' ? '0.35' : '1');
+    r.setAttribute('fill', sol ? c : s === 'bos' ? 'none' : 'url(#lgPat)');
+    r.setAttribute('fill-opacity', sol ? String(sol) : '1');
   }
   function buildPattern(){ defs.innerHTML = ''; ensurePattern($('hatchColor').value); buildLegend(); }
   function lineOf(r){ return (r && (r.lineColor || r.color)) || $('hatchColor').value; }
   function polyStyle(r){
-    var c = (r && r.color) || $('hatchColor').value, solid = $('hatchStyle').value === 'dolgu';
+    var c = (r && r.color) || $('hatchColor').value, st = $('hatchStyle').value, sol = hSolid(st);
     var id = ensurePattern(c);
     return {color: lineOf(r), weight: 2.5, opacity: 1, lineJoin: 'round',
-      fillColor: solid ? c : 'url(#' + id + ')', fillOpacity: solid ? 0.35 : 1};
+      fillColor: (sol || st === 'bos') ? c : 'url(#' + id + ')', fillOpacity: st === 'bos' ? 0 : sol ? sol : 1};
   }
   function isBlack(r){ return String(lineOf(r)).toLowerCase() === '#000000'; }
   function raiseBlack(){ (rows || []).forEach(function(r){ if (r.layer && !r.hidden && isBlack(r) && group.hasLayer(r.layer)) r.layer.bringToFront(); }); }
@@ -1618,18 +1627,22 @@ function poleOf(g){
     return fetch(url, {mode: 'cors'}).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); }).then(function(b){ return createImageBitmap(b); });
   }
   function hatchPattern(ctx, color, style, s, lw){
+    s = Math.max(4, Math.round(s * hMul(style)));
     var c = document.createElement('canvas'); c.width = c.height = s;
-    var x = c.getContext('2d');
-    x.fillStyle = color; x.globalAlpha = style === 'dolgu' ? 0.35 : 0.12; x.fillRect(0, 0, s, s);
+    var x = c.getContext('2d'), k = hKind(style), sol = hSolid(style);
+    x.fillStyle = color; x.globalAlpha = style === 'bos' ? 0 : sol || 0.12; x.fillRect(0, 0, s, s);
     x.globalAlpha = 1; x.strokeStyle = color; x.lineWidth = lw; x.lineCap = 'square';
-    if (style !== 'dolgu') {
+    if (!sol && style !== 'bos') {
       x.beginPath();
-      if (style === 'yatay') { x.moveTo(0, s / 2); x.lineTo(s, s / 2); }
-      else {
+      if (k === 'h' || k === 'g') { x.moveTo(0, s / 2); x.lineTo(s, s / 2); }
+      if (k === 'v' || k === 'g') { x.moveTo(s / 2, 0); x.lineTo(s / 2, s); }
+      if (k === 'dot') { x.fillStyle = color; x.arc(s / 2, s / 2, Math.max(1.5, lw * 1.0), 0, Math.PI * 2); x.fill(); }
+      if (k === 'd' || k === 'dd') {
+        if (style === 'ters') { x.translate(s, 0); x.scale(-1, 1); }
         x.moveTo(-1, s + 1); x.lineTo(s + 1, -1);
         x.moveTo(-1 - s / 2, s / 2 + 1); x.lineTo(s / 2 + 1, -1 - s / 2);
         x.moveTo(s / 2 - 1, s + 1 + s / 2); x.lineTo(s + 1 + s / 2, s / 2 - 1);
-        if (style === 'cift') { x.moveTo(-1, -1); x.lineTo(s + 1, s + 1); x.moveTo(-1 - s / 2, s / 2 - 1); x.lineTo(s / 2 + 1, s + 1 + s / 2); x.moveTo(s / 2 - 1, -1 - s / 2); x.lineTo(s + 1 + s / 2, s / 2 + 1); }
+        if (k === 'dd') { x.moveTo(-1, -1); x.lineTo(s + 1, s + 1); x.moveTo(-1 - s / 2, s / 2 - 1); x.lineTo(s / 2 + 1, s + 1 + s / 2); x.moveTo(s / 2 - 1, -1 - s / 2); x.lineTo(s + 1 + s / 2, s / 2 + 1); }
       }
       x.stroke();
     }

@@ -79,7 +79,10 @@
 [hidden]{display:none!important}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 var(--font-body);-webkit-font-smoothing:antialiased}
-.app{display:grid;grid-template-columns:minmax(340px,430px) minmax(0,1fr);height:100%}
+.app{display:grid;grid-template-columns:var(--sbw,430px) 8px minmax(0,1fr);height:100%}
+.splitter{cursor:col-resize;background:var(--line);position:relative;touch-action:none}
+.splitter:hover,.splitter.drag,.splitter:focus-visible{background:var(--accent);outline:0}
+.splitter::after{content:'';position:absolute;left:1px;top:50%;width:6px;height:36px;margin-top:-18px;border-radius:3px;background:rgba(255,255,255,.55)}
 .panel{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column;min-width:0}
 .mapwrap{position:relative;min-width:0;min-height:0}
 #map{position:absolute;inset:0;background:var(--panel-2)}
@@ -99,7 +102,8 @@ textarea,input[type=text],select{
   width:100%;background:var(--panel-2);color:var(--ink);border:1px solid var(--line);border-radius:4px;
   padding:8px 10px;font:inherit;min-width:0
 }
-textarea{font:12.5px/1.5 var(--font-mono);min-height:150px;resize:vertical;white-space:pre;overflow:auto}
+textarea{font:12.5px/1.5 var(--font-mono);min-height:0;resize:vertical;white-space:pre;overflow:auto}
+#list{height:4.9em}
 textarea::placeholder{color:var(--muted);opacity:.8}
 input[type=color]{width:40px;height:34px;padding:2px;border:1px solid var(--line);border-radius:4px;background:var(--panel-2);cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -208,12 +212,13 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 @media (max-width:860px){
   html,body{height:auto}
   .app{grid-template-columns:minmax(0,1fr);height:auto}
+  .splitter{display:none}
   .panel{border-right:0;overflow:visible}
   .mapwrap{height:72vh;min-height:420px;border-top:1px solid var(--line)}
   header.top,section{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
 @media (prefers-reduced-motion:reduce){.progress>i{transition:none}}
-  .colorsum{margin:12px 0;padding:10px 12px;border:1px solid var(--line,#d5dde0);border-radius:10px;background:#fff}
+  .colorsum{overflow-x:auto;margin:12px 0;padding:10px 12px;border:1px solid var(--line,#d5dde0);border-radius:10px;background:#fff}
   .colorsum h3{margin:0 0 6px;font-size:15px}
   .colorsum table{width:100%;border-collapse:collapse}
   .colorsum td{padding:5px 4px;border-top:1px solid #edf1f2;white-space:nowrap}
@@ -261,19 +266,29 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </header>
 
     <section>
-      <div class="sec-h"><h2>Parsel listesi</h2><div class="row"><button id="btnExcel" type="button">Excel / CSV yükle</button><button id="btnPhoto" type="button">Fotoğraftan yükle</button><button class="ghost" id="btnSample" type="button">Örnek biçim</button></div></div>
-      <input type="file" id="filePhoto" accept="image/*" hidden>
-      <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv,.ods,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-      <textarea id="list" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
-      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>. Excel dosyası veya fotoğraf yükleyebilir, hücreleri kopyalayıp yapıştırabilirsiniz. Ayırıcı sekme, noktalı virgül veya virgül olabilir. Başlık satırı varsa sütunlar adından tanınır, <code>101/12</code> yazımı da kabul edilir.</p>
+      <div class="sec-h"><h2>Parsel listesi</h2></div>
       <div class="row">
         <label class="f grow">Varsayılan il<input type="text" id="defIl" placeholder="Listede il yoksa"></label>
         <label class="f grow">Varsayılan ilçe<input type="text" id="defIlce" placeholder="Listede ilçe yoksa"></label>
       </div>
+      <textarea id="list" rows="3" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
+      <div class="row">
+        <label class="f grow">Dosyadan yükle
+          <select id="upType"><option value="excel">Excel / CSV</option><option value="photo">Fotoğraf (liste resmi)</option><option value="backup">Yedek dosyası (.geojson / .json)</option></select>
+        </label>
+        <button type="button" id="btnUpload">Dosya seç</button>
+        <button class="ghost" id="btnSample" type="button">Örnek biçim</button>
+      </div>
+      <button id="btnExcel" type="button" hidden></button><button id="btnPhoto" type="button" hidden></button><button id="btnImport" type="button" hidden></button>
+      <input type="file" id="filePhoto" accept="image/*" hidden>
+      <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv,.ods,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <input type="file" id="fileImport" hidden>
+      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>; ayırıcı sekme, ; veya , olabilir. <code>Mahalle 101/12</code> yazımı da kabul edilir.</p>
       <div class="row">
         <button class="primary grow" id="btnRun" type="button">Sorgula ve haritada göster</button>
         <button id="btnStop" type="button" disabled>Durdur</button>
         <button class="ghost" id="btnClear" type="button">Temizle</button>
+        <button id="btnRetry" type="button" disabled title="Hata veren ve bulunamayan parselleri yeniden sorgula">Hatalıları yeniden dene</button>
       </div>
       <div class="progress" aria-hidden="true"><i id="bar"></i></div>
       <div class="counts" id="counts"></div>
@@ -381,11 +396,6 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <div class="colorbox">
         <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
-        <div class="cmode" role="radiogroup" aria-label="Rengin uygulanacağı yer">
-          <label><input type="radio" name="colorMode" value="both" checked> Çizgi + dolgu</label>
-          <label><input type="radio" name="colorMode" value="fill"> Yalnız dolgu</label>
-          <label><input type="radio" name="colorMode" value="line"> Yalnız çizgi</label>
-        </div>
         <div class="swatches" id="swatches">
           <button class="s" type="button" data-c="#e0301e" style="background:#e0301e" aria-label="Kırmızı"></button>
           <button class="s" type="button" data-c="#f08a00" style="background:#f08a00" aria-label="Turuncu"></button>
@@ -407,18 +417,17 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         </label>
       </div>
       <div class="row">
-        <button id="btnRetry" type="button" disabled>Hatalıları yeniden dene</button>
-        <button id="btnGeo" type="button" disabled>Yedekle (.json)</button>
-        <button id="btnKml" type="button" disabled>KML</button>
-        <button id="btnCsv" type="button" disabled>CSV</button>
-        <button class="ghost" id="btnImport" type="button">Yedekten yükle</button>
-        <input type="file" id="fileImport" hidden>
+        <label class="f grow">Yedekle / dışa aktar
+          <select id="dlType"><option value="geo">Yedek (.geojson)</option><option value="kml">KML</option><option value="csv">CSV</option></select>
+        </label>
+        <button type="button" id="btnDl" disabled>İndir</button>
       </div>
+      <button id="btnGeo" type="button" hidden disabled></button><button id="btnKml" type="button" hidden disabled></button><button id="btnCsv" type="button" hidden disabled></button>
     </section>
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · parselde fiyat</summary>
+        <summary>Ayarlar · sürüm 03.11 · sade menü</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -430,6 +439,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </details>
     </section>
   </aside>
+  <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Menü genişliği (sürükleyin, çift tıklayınca genişler)" tabindex="0" title="Sürükleyerek menüyü genişletin · çift tıkla: geniş/dar"></div>
 
   <main class="mapwrap" id="mapwrap">
     <div id="map" aria-label="Parsel haritası"></div>
@@ -1082,6 +1092,7 @@ function poleOf(g){
     var found = cnt.bulundu > 0;
     $('btnGeo').disabled = $('btnKml').disabled = $('btnCsv').disabled = !rows.length;
     $('btnGeo').disabled = $('btnKml').disabled = !found;
+    syncDl();
     $('btnExport').disabled = !found || exporting;
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
@@ -1280,6 +1291,32 @@ function poleOf(g){
     abort = true; group.clearLayers(); rows = []; selected = null; $('list').value = ''; showNotice(''); save(); renderTable();
   });
   $('btnFit').addEventListener('click', fitAll);
+  function syncDl(){ var b = $({geo: 'btnGeo', kml: 'btnKml', csv: 'btnCsv'}[$('dlType').value]); $('btnDl').disabled = !b || b.disabled; }
+  $('dlType').addEventListener('change', syncDl);
+  $('btnDl').addEventListener('click', function(){ var b = $({geo: 'btnGeo', kml: 'btnKml', csv: 'btnCsv'}[$('dlType').value]); if (b && !b.disabled) b.click(); });
+  $('btnUpload').addEventListener('click', function(){ $({excel: 'btnExcel', photo: 'btnPhoto', backup: 'btnImport'}[$('upType').value]).click(); });
+  (function(){
+    var sp = $('splitter'), app = document.querySelector('.app'), KEY = 'parsel-harita-sbw';
+    function setW(w, persist){
+      w = Math.max(320, Math.min(w, Math.round(window.innerWidth * 0.8)));
+      app.style.setProperty('--sbw', w + 'px');
+      if (persist) { try { localStorage.setItem(KEY, String(w)); } catch (e) {} }
+      clearTimeout(setW.t); setW.t = setTimeout(function(){ map.invalidateSize(); }, 60);
+      return w;
+    }
+    try { var sv = parseInt(localStorage.getItem(KEY), 10); if (sv) setW(sv, false); } catch (e) {}
+    var drag = false;
+    sp.addEventListener('pointerdown', function(e){ drag = true; sp.classList.add('drag'); try { sp.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); });
+    sp.addEventListener('pointermove', function(e){ if (drag) setW(e.clientX, false); });
+    function end(e){ if (!drag) return; drag = false; sp.classList.remove('drag'); setW(e.clientX, true); }
+    sp.addEventListener('pointerup', end); sp.addEventListener('pointercancel', function(){ drag = false; sp.classList.remove('drag'); });
+    sp.addEventListener('dblclick', function(){ var cur = $('splitter').previousElementSibling.getBoundingClientRect().width; setW(cur > 600 ? 430 : Math.round(window.innerWidth * 0.6), true); });
+    sp.addEventListener('keydown', function(e){
+      var cur = sp.previousElementSibling.getBoundingClientRect().width;
+      if (e.key === 'ArrowRight') { setW(cur + 40, true); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { setW(cur - 40, true); e.preventDefault(); }
+    });
+  })();
   $('btnExcel').addEventListener('click', function(){ $('fileExcel').click(); });
   $('fileExcel').addEventListener('change', function(e){
     var f = e.target.files[0]; if (!f) return;

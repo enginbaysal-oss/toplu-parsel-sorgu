@@ -418,7 +418,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · renk bazında fiyat</summary>
+        <summary>Ayarlar · sürüm 03.11 · renge fiyat uygula</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1006,8 +1006,8 @@ function poleOf(g){
     list.forEach(function(r){
       if (!r.feature || r.hidden) return;
       var c = String(r.color || def).toLowerCase();
-      if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0, price: 0}; out.push(map[c]); }
-      map[c].n++; map[c].area += areaOf(r); map[c].price += totalOf(r);
+      if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0, price: 0, pr: {}}; out.push(map[c]); }
+      map[c].n++; map[c].area += areaOf(r); map[c].price += totalOf(r); map[c].pr[r.priceM2 || 0] = 1;
     });
     return out;
   }
@@ -1017,9 +1017,12 @@ function poleOf(g){
     if (!any || !g.length) { box.hidden = true; box.innerHTML = ''; return; }
     var tot = g.reduce(function(a, x){ return a + x.area; }, 0), n = g.reduce(function(a, x){ return a + x.n; }, 0);
     var ptot = g.reduce(function(a, x){ return a + x.price; }, 0), hp = ptot > 0;
-    box.innerHTML = '<h3>Renklere göre toplam yüzölçümü' + (hp ? ' ve fiyat' : '') + '</h3><table>' + g.map(function(x){
-      return '<tr><td><span class="sw" style="background:' + esc(x.color) + '"></span> ' + esc(x.name) + '</td><td class="num">' + x.n + ' parsel</td><td class="num">' + esc(fmtArea(x.area)) + '</td>' + (hp ? '<td class="num">' + (x.price > 0 ? esc(fmtTL(x.price)) : '') + '</td>' : '') + '</tr>';
-    }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td>' + (hp ? '<td class="num">' + esc(fmtTL(ptot)) + '</td>' : '') + '</tr></table>';
+    box.innerHTML = '<h3>Renklere göre toplam yüzölçümü ve fiyat</h3><table><tr><td></td><td></td><td></td><td class="num" style="font-size:12px">₺/m² (renge uygula)</td><td class="num" style="font-size:12px">Toplam fiyat</td></tr>' + g.map(function(x){
+      var ks = Object.keys(x.pr), uni = ks.length === 1 && ks[0] !== '0' ? ks[0] : '';
+      return '<tr><td><span class="sw" style="background:' + esc(x.color) + '"></span> ' + esc(x.name) + '</td><td class="num">' + x.n + ' parsel</td><td class="num">' + esc(fmtArea(x.area)) + '</td>' +
+        '<td class="num"><input type="text" class="cprice mprice" data-c="' + esc(x.color) + '" inputmode="decimal" placeholder="' + (ks.length > 1 && ks.some(function(k){ return k !== '0'; }) ? 'karışık' : '₺/m²') + '" aria-label="' + esc(x.name) + ' parsellere m² fiyatı" value="' + esc(String(uni).replace('.', ',')) + '"></td>' +
+        '<td class="num">' + (x.price > 0 ? esc(fmtTL(x.price)) : '') + '</td></tr>';
+    }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td><td></td><td class="num">' + (hp ? esc(fmtTL(ptot)) : '') + '</td></tr></table>';
     box.hidden = false;
   }
   function parseNum(v){
@@ -1119,6 +1122,12 @@ function poleOf(g){
     var n = parseFloat(t);
     r.manualArea = isFinite(n) && n > 0 ? n : null;
     renderTable();
+  });
+  $('colorSum').addEventListener('change', function(e){
+    if (!e.target.classList.contains('cprice')) return;
+    var col = e.target.dataset.c, v = parseNum(e.target.value), def = String($('hatchColor').value || '').toLowerCase();
+    rows.forEach(function(r){ if (r.feature && !r.hidden && String(r.color || def).toLowerCase() === col) r.priceM2 = v; });
+    renderTable(); saveRows();
   });
   $('btnBulkPrice').addEventListener('click', function(){
     var v = parseNum($('bulkPrice').value); if (!v) { showNotice('Önce geçerli bir m² fiyatı yazın.'); return; }

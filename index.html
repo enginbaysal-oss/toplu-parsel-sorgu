@@ -250,6 +250,11 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   td.ptot{white-space:nowrap;font-weight:600}
   .pricesum{margin:8px 0;padding:8px 10px;border:1px solid #8a979c;border-radius:6px;font-size:14px;background:#fffdf3}
   .pricesum .row{align-items:end;margin-top:6px}
+  .optdd{border:1px solid var(--line);border-radius:4px;background:var(--panel-2);padding:0}
+  .optdd summary{text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink);cursor:pointer;padding:8px 10px;font-size:14px;list-style:none;display:flex;justify-content:space-between;gap:8px}
+  .optdd summary::after{content:'▾';color:var(--muted)}
+  .optdd[open] summary::after{content:'▴'}
+  .optdd .check{padding:6px 10px;border-top:1px solid var(--line)}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
   .mu{font-size:12px;color:#586a72}
   .cmode{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:14px}
@@ -274,7 +279,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <textarea id="list" rows="3" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
       <div class="row">
         <label class="f grow">Dosyadan yükle
-          <select id="upType"><option value="excel">Excel / CSV</option><option value="photo">Fotoğraf (liste resmi)</option><option value="backup">Yedek dosyası (.geojson / .json)</option></select>
+          <select id="upType"><option value="backup">Yedek (geojson/json)</option><option value="photo">Fotoğraf</option><option value="excel">Excel / CSV</option></select>
         </label>
         <button type="button" id="btnUpload">Dosya seç</button>
         <button class="ghost" id="btnSample" type="button">Örnek biçim</button>
@@ -288,11 +293,27 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button class="primary grow" id="btnRun" type="button">Sorgula ve haritada göster</button>
         <button id="btnStop" type="button" disabled>Durdur</button>
         <button class="ghost" id="btnClear" type="button">Temizle</button>
+      </div>
+      <div class="row">
         <button id="btnRetry" type="button" disabled title="Hata veren ve bulunamayan parselleri yeniden sorgula">Hatalıları yeniden dene</button>
+        <button id="btnAddToggle" type="button" aria-expanded="false">+ Parsel ekle</button>
+      </div>
+      <div class="addrow" id="addPanel" hidden>
+        <label class="f">Yeni parsel(ler), her satıra bir tane<textarea id="addText" rows="2" spellcheck="false" placeholder="Mahalle 122 14&#10;ya da: İl İlçe Mahalle Ada Parsel"></textarea></label>
+        <button type="button" id="btnAddRows">Ekle ve sorgula</button>
+        <p class="hint">Listeye eklenir, mevcut parseller silinmez. İl ve ilçe boşsa yukarıdaki varsayılan il/ilçe kullanılır.</p>
       </div>
       <div class="progress" aria-hidden="true"><i id="bar"></i></div>
       <div class="counts" id="counts"></div>
       <p class="notice" id="notice" hidden></p>
+      <div class="pricesum" id="priceSum">
+        <div class="row">
+          <label class="f grow">Toplu m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
+          <button type="button" id="btnBulkPrice" class="ghost" title="İşaretli parsellere, işaret yoksa tümüne uygular">Uygula</button>
+          <button type="button" id="btnClearPrice" class="ghost">Temizle</button>
+        </div>
+        <div id="priceTot" style="margin-top:6px"></div>
+      </div>
     </section>
 
     <section>
@@ -335,27 +356,27 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <h2>Müşteri çıktısı</h2>
-      <p class="hint">Tüm parselleri kapsayan, büyütüldüğünde detayı görülen harita görüntüsü. İstenirse PDF'in ikinci sayfasından itibaren parsel listesi de eklenir.</p>
       <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası"></label>
       <div class="row">
         <label class="f grow">Biçim
-          <select id="outFmt"><option value="pdf">PDF (harita + liste)</option><option value="jpg">JPEG (yalnız harita)</option><option value="xlsx">Excel (parsel listesi, düzenlenebilir)</option></select>
+          <select id="outFmt"><option value="pdf">PDF</option><option value="jpg">JPEG (harita)</option><option value="xlsx">Excel (liste)</option></select>
         </label>
         <label class="f grow">Kalite
           <select id="outQ"><option value="5000000">Normal</option><option value="10000000" selected>Yüksek</option><option value="20000000">Çok yüksek</option></select>
         </label>
-      </div>
-      <div class="row">
-        <label class="f grow">PDF sayfa boyutu
-          <select id="outPage"><option value="a3" selected>A3 (büyük, detaylı)</option><option value="a4">A4</option></select>
+        <label class="f grow">Sayfa
+          <select id="outPage"><option value="a3" selected>A3</option><option value="a4">A4</option></select>
         </label>
       </div>
-      <label class="check"><input type="checkbox" id="outLabels"> Çıktıda ada/parsel etiketlerini göster</label>
-      <label class="check"><input type="checkbox" id="outList" checked> PDF'e parsel listesi sayfası ekle</label>
-      <label class="check"><input type="checkbox" id="outPrice"> Listede m² fiyatı ve toplam fiyatı göster (satırlarda ve renk toplamlarında)</label>
-      <label class="check"><input type="checkbox" id="outMiss" checked> Listeye bulunamayan parselleri de ekle (karşısına not düşülür)</label>
+      <details class="optdd" id="outOpts">
+        <summary id="outOptsSum">İçerik seçenekleri</summary>
+        <label class="check"><input type="checkbox" id="outLabels"> Haritada ada/parsel etiketlerini göster</label>
+        <label class="check"><input type="checkbox" id="outList" checked> Parsel listesi sayfası ekle (PDF)</label>
+        <label class="check"><input type="checkbox" id="outPrice"> m² fiyatı ve toplam fiyatı göster</label>
+        <label class="check"><input type="checkbox" id="outMiss" checked> Bulunamayan parselleri de ekle</label>
+      </details>
       <button class="primary" id="btnExport" type="button">Çıktı al</button>
-      <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Telefonda bellek yetmezse kalite kendiliğinden düşürülüp yeniden denenir.</p>
+      <p class="hint">Altlık olarak ekrandaki harita seçimi kullanılır.</p>
     </section>
 
     <section>
@@ -371,12 +392,6 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnHideSel">Gizle</button>
         <button type="button" id="btnDelSel" class="danger">Sil</button>
       </div>
-      <details class="addrow">
-        <summary>Parsel ekle</summary>
-        <label class="f">Yeni parsel(ler), her satıra bir tane<textarea id="addText" rows="2" spellcheck="false" placeholder="Mahalle 122 14&#10;ya da: İl İlçe Mahalle Ada Parsel"></textarea></label>
-        <button type="button" id="btnAddRows">Ekle ve sorgula</button>
-        <p class="hint">Listeye eklenir, mevcut parseller silinmez. İl ve ilçe boşsa yukarıdaki varsayılan il/ilçe kullanılır.</p>
-      </details>
       <div class="tablewrap">
         <table>
           <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th class="num">₺/m²</th><th class="num">Toplam fiyat</th><th>Not</th></tr></thead>
@@ -385,15 +400,6 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
       </div>
       <div class="colorsum" id="colorSum" hidden></div>
-      <div class="pricesum" id="priceSum">
-        <b>m² fiyatı</b> <span class="hint" style="margin:0">Satırdaki ₺/m² kutusuna yazın, toplam fiyat otomatik hesaplanır.</span>
-        <div class="row">
-          <label class="f">Toplu m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
-          <button type="button" id="btnBulkPrice" class="ghost">İşaretlilere uygula (işaret yoksa tümüne)</button>
-          <button type="button" id="btnClearPrice" class="ghost">Fiyatları temizle</button>
-        </div>
-        <div id="priceTot" style="margin-top:6px"></div>
-      </div>
       <div class="colorbox">
         <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
         <div class="swatches" id="swatches">
@@ -427,7 +433,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · sade menü</summary>
+        <summary>Ayarlar · sürüm 04.11 · sade menü 2</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1148,6 +1154,14 @@ function poleOf(g){
     rows.forEach(function(r){ if (r.feature && !r.hidden && String(r.color || def).toLowerCase() === col) r.priceM2 = v; });
     renderTable(); saveRows();
   });
+  function syncOutSum(){
+    var t = [];
+    if ($('outLabels').checked) t.push('etiket'); if ($('outList').checked) t.push('liste'); if ($('outPrice').checked) t.push('fiyat'); if ($('outMiss').checked) t.push('bulunamayanlar');
+    $('outOptsSum').textContent = 'İçerik: ' + (t.length ? t.join(' · ') : 'yalnız harita');
+  }
+  ['outLabels', 'outList', 'outPrice', 'outMiss'].forEach(function(id){ $(id).addEventListener('change', syncOutSum); });
+  syncOutSum();
+  $('btnAddToggle').addEventListener('click', function(){ var pn = $('addPanel'); pn.hidden = !pn.hidden; this.setAttribute('aria-expanded', String(!pn.hidden)); if (!pn.hidden) $('addText').focus(); });
   $('btnBulkPrice').addEventListener('click', function(){
     var v = parseNum($('bulkPrice').value); if (!v) { showNotice('Önce geçerli bir m² fiyatı yazın.'); return; }
     var c = rows.filter(function(r){ return r.checked; }); if (!c.length) c = rows.slice();
@@ -2196,7 +2210,7 @@ function poleOf(g){
   function save(){
     try {
       localStorage.setItem(LS, JSON.stringify({list: $('list').value, defIl: $('defIl').value, defIlce: $('defIlce').value,
-        base: $('base').value, hatchStyle: $('hatchStyle').value, hatchColor: $('hatchColor').value,
+        base: $('base').value, hatchStyle: $('hatchStyle').value, hatchColor: $('hatchColor').value, cv: 2,
         labels: $('showLabels').checked, api: $('apiBase').value, conc: $('conc').value, mb: $('mbToken').value}));
     } catch (e) {}
   }
@@ -2208,7 +2222,7 @@ function poleOf(g){
       if (s.defIlce != null) $('defIlce').value = s.defIlce;
       if (s.base) $('base').value = s.base;
       if (s.hatchStyle) $('hatchStyle').value = s.hatchStyle;
-      if (s.hatchColor) $('hatchColor').value = s.hatchColor;
+      if (s.hatchColor && s.cv === 2) $('hatchColor').value = s.hatchColor;
       if (s.labels != null) $('showLabels').checked = !!s.labels;
       if (s.api && s.api !== API_OLD && s.api !== 'https://purple-morning-da64.engin-baysal.workers.dev') $('apiBase').value = s.api;
       if (s.conc) $('conc').value = s.conc;

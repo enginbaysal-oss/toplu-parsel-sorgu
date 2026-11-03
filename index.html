@@ -418,7 +418,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · Excel çıktısı</summary>
+        <summary>Ayarlar · sürüm 03.11 · parselde fiyat</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -912,6 +912,8 @@ function poleOf(g){
     add('Nitelik', prop(p, ['nitelik']));
     add('Mevkii', prop(p, ['mevkii']));
     add('Pafta', prop(p, ['pafta', 'paftaNo']));
+    rowsHtml += '<tr><td>m² fiyatı</td><td><input type="text" class="ppr" inputmode="decimal" placeholder="₺/m²" aria-label="m² fiyatı (₺)" value="' + (r.priceM2 ? esc(String(r.priceM2).replace('.', ',')) : '') + '" style="width:90px;padding:3px 5px;font:inherit;text-align:right"> ₺</td></tr>' +
+      '<tr><td><b>Toplam fiyat</b></td><td class="ppt"><b>' + (totalOf(r) > 0 ? esc(fmtTL(totalOf(r))) : '–') + '</b></td></tr>';
     var out = '<b>' + esc(r.ada) + ' ada, ' + esc(r.parsel) + ' parsel</b><table>' + rowsHtml + '</table>';
     var cen = r.feature && centroidOf(r.feature.geometry);
     if (cen) {
@@ -943,6 +945,12 @@ function poleOf(g){
     if (!el || !r) return;
     var cb = el.querySelector('.pclose');
     if (cb) cb.addEventListener('click', function(){ map.closePopup(); });
+    var pp = el.querySelector('.ppr');
+    if (pp) {
+      var showTot = function(){ var t = r.priceM2 ? areaForPrice(r) * r.priceM2 : 0; var c = el.querySelector('.ppt'); if (c) c.innerHTML = '<b>' + (t > 0 ? esc(fmtTL(t)) : '–') + '</b>'; };
+      pp.addEventListener('input', function(){ r.priceM2 = parseNum(pp.value); showTot(); });
+      pp.addEventListener('change', function(){ r.priceM2 = parseNum(pp.value); showTot(); renderTable(); saveRows(); });
+    }
     var hs = el.querySelector('.phatch');
     if (hs) hs.addEventListener('change', function(){ setHatchOf(r, hs.value); renderTable(); saveRows(); });
     el.querySelectorAll('.pcs').forEach(function(box){

@@ -324,7 +324,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası"></label>
       <div class="row">
         <label class="f grow">Biçim
-          <select id="outFmt"><option value="pdf">PDF (harita + liste)</option><option value="jpg">JPEG (yalnız harita)</option></select>
+          <select id="outFmt"><option value="pdf">PDF (harita + liste)</option><option value="jpg">JPEG (yalnız harita)</option><option value="xlsx">Excel (parsel listesi, düzenlenebilir)</option></select>
         </label>
         <label class="f grow">Kalite
           <select id="outQ"><option value="5000000">Normal</option><option value="10000000" selected>Yüksek</option><option value="20000000">Çok yüksek</option></select>
@@ -418,7 +418,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · çıktıda fiyat</summary>
+        <summary>Ayarlar · sürüm 03.11 · Excel çıktısı</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2004,6 +2004,65 @@ function poleOf(g){
     setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     showNotice('Çıktı hazırlandı: ' + name, true);
   }
+  function buildXlsx(title){
+    var list = rows.filter(function(r){ return (r.feature && !r.hidden) || (!r.feature && $('outMiss').checked && (r.status === 'yok' || r.status === 'hata')); });
+    var showPrice = $('outPrice').checked && list.some(function(r){ return totalOf(r) > 0; });
+    var hasNote = list.some(function(r){ return r.userNote; });
+    var head = ['Sıra No', 'İl', 'İlçe', 'Mahalle', 'Ada', 'Parsel', 'Yüzölçümü (m²)', 'Nitelik'];
+    if (showPrice) head.push('m² fiyatı (₺)', 'Toplam fiyat (₺)');
+    if (hasNote) head.push('Not');
+    var col = function(i){ return XLSX.utils.encode_col(i); };
+    var A = 'G', N = 'H', PR = 'I', TT = 'J';
+    var aoa = [head], n0 = 2, nMiss = 0;
+    list.forEach(function(r, i){
+      var line = i + n0, miss = !r.feature, p = r.props || {};
+      var ar = miss ? (r.manualArea || '') : (areaOf(r) || '');
+      var row = [i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel,
+        ar === '' ? '' : {t: 'n', v: ar, z: '#,##0.00'},
+        miss ? (r.status === 'yok' ? 'BULUNAMADI' : 'SORGULANAMADI') : String(prop(p, ['nitelik']) || '')];
+      if (miss) nMiss++;
+      if (showPrice) {
+        row.push(r.priceM2 ? {t: 'n', v: r.priceM2, z: '#,##0.00'} : '');
+        row.push(r.priceM2 && ar !== '' ? {t: 'n', v: ar * r.priceM2, f: A + line + '*' + PR + line, z: '#,##0'} : '');
+      }
+      if (hasNote) row.push(r.userNote || '');
+      aoa.push(row);
+    });
+    var last = list.length + 1, blank = [];
+    aoa.push(blank);
+    var pad = function(label, areaCell, priceCell){
+      var r = []; for (var k = 0; k < head.length; k++) r.push('');
+      r[3] = label; r[6] = areaCell;
+      if (showPrice && priceCell !== undefined) r[9] = priceCell;
+      return r;
+    };
+    var foundArea = list.reduce(function(a, r){ return a + (r.feature ? areaOf(r) : 0); }, 0);
+    var allArea = list.reduce(function(a, r){ return a + (r.feature ? areaOf(r) : (r.manualArea || 0)); }, 0);
+    var foundPrice = list.reduce(function(a, r){ return a + (r.feature ? totalOf(r) : 0); }, 0);
+    var allPrice = list.reduce(function(a, r){ return a + totalOf(r); }, 0);
+    var rng = function(c){ return c + '2:' + c + last; };
+    if (nMiss) {
+      aoa.push(pad('Bulunan parsellerin toplamı', {t: 'n', v: foundArea, f: 'SUMIF(' + rng(N) + ',"<>BULUNAMADI",' + rng(A) + ')-SUMIF(' + rng(N) + ',"SORGULANAMADI",' + rng(A) + ')', z: '#,##0.00'}, {t: 'n', v: foundPrice, f: 'SUMIF(' + rng(N) + ',"<>BULUNAMADI",' + rng(TT) + ')-SUMIF(' + rng(N) + ',"SORGULANAMADI",' + rng(TT) + ')', z: '#,##0'}));
+      aoa.push(pad('Genel toplam (bulunamayanlar dahil)', {t: 'n', v: allArea, f: 'SUM(' + rng(A) + ')', z: '#,##0.00'}, {t: 'n', v: allPrice, f: 'SUM(' + rng(TT) + ')', z: '#,##0'}));
+    } else {
+      aoa.push(pad('Toplam', {t: 'n', v: allArea, f: 'SUM(' + rng(A) + ')', z: '#,##0.00'}, {t: 'n', v: allPrice, f: 'SUM(' + rng(TT) + ')', z: '#,##0'}));
+    }
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    var widths = [8, 14, 14, 22, 8, 8, 16, 18]; if (showPrice) widths.push(14, 18); if (hasNote) widths.push(36);
+    ws['!cols'] = widths.map(function(w){ return {wch: w}; });
+    ws['!freeze'] = {xSplit: 0, ySplit: 1};
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Parsel listesi');
+    var grp = colorGroups(list), anyCol = list.some(function(r){ return r.feature && r.color; });
+    if (anyCol && grp.length) {
+      var g2 = [['Renk', 'Parsel sayısı', 'Yüzölçümü (m²)'].concat(showPrice ? ['Toplam fiyat (₺)'] : [])];
+      grp.forEach(function(g){ g2.push([g.name, g.n, {t: 'n', v: g.area, z: '#,##0.00'}].concat(showPrice ? [{t: 'n', v: g.price, z: '#,##0'}] : [])); });
+      var cs = XLSX.utils.aoa_to_sheet(g2); cs['!cols'] = [{wch: 16}, {wch: 14}, {wch: 18}, {wch: 18}];
+      XLSX.utils.book_append_sheet(wb, cs, 'Renk toplamları');
+    }
+    var out = XLSX.write(wb, {type: 'array', bookType: 'xlsx'});
+    return new Blob([out], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
   $('btnExport').addEventListener('click', async function(){
     var items = foundRows();
     if (!items.length) { showNotice('Önce parselleri sorgulayın, çıktı bulunan parsellerden alınır.'); return; }
@@ -2013,6 +2072,12 @@ function poleOf(g){
     var stamp = d.getFullYear() + z2(d.getMonth() + 1) + z2(d.getDate()) + '-' + z2(d.getHours()) + z2(d.getMinutes());
     var res = null;
     try {
+      if ($('outFmt').value === 'xlsx') {
+        showNotice('Excel dosyası hazırlanıyor…', true);
+        await saveBlob('parsel-listesi-' + stamp + '.xlsx', buildXlsx(title), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        showNotice('Excel dosyası kaydedildi.', true);
+        return;
+      }
       showNotice('Harita hazırlanıyor…', true);
       var cap0 = window.Capacitor, isNat = !!(cap0 && cap0.isNativePlatform && cap0.isNativePlatform());
       var budget = (parseInt($('outQ').value, 10) || 10000000) * (isNat ? 1 : 2.5), lastErr = null;

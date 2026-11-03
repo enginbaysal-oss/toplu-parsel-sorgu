@@ -337,7 +337,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <label class="check"><input type="checkbox" id="outLabels"> Çıktıda ada/parsel etiketlerini göster</label>
       <label class="check"><input type="checkbox" id="outList" checked> PDF'e parsel listesi sayfası ekle</label>
-      <label class="check"><input type="checkbox" id="outPrice"> Listede toplam fiyatı da göster (m² fiyatı girilmişse; renk toplamlarında da)</label>
+      <label class="check"><input type="checkbox" id="outPrice"> Listede m² fiyatı ve toplam fiyatı göster (satırlarda ve renk toplamlarında)</label>
       <label class="check"><input type="checkbox" id="outMiss" checked> Listeye bulunamayan parselleri de ekle (karşısına not düşülür)</label>
       <button class="primary" id="btnExport" type="button">Çıktı al</button>
       <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Telefonda bellek yetmezse kalite kendiliğinden düşürülüp yeniden denenir.</p>
@@ -418,7 +418,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · renge fiyat uygula</summary>
+        <summary>Ayarlar · sürüm 03.11 · çıktıda fiyat</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1883,7 +1883,11 @@ function poleOf(g){
   function renderTablePages(items, title){
     var PW = 1654, PH = 2339, M = 110, RH = 62, HH = 230, pages = [];
     var hasNote = items.some(function(r){ return r.userNote; });
-    var cols = hasNote ?
+    var showPrice = $('outPrice').checked && items.some(function(r){ return totalOf(r) > 0; });
+    var cols = showPrice ? (hasNote ?
+      [{t: 'Sıra', w: 70}, {t: 'İl', w: 100}, {t: 'İlçe', w: 130}, {t: 'Mahalle', w: 180}, {t: 'Ada', w: 70}, {t: 'Parsel', w: 80}, {t: 'Yüzölçümü', w: 180}, {t: 'Nitelik', w: 180}, {t: '₺/m²', w: 90}, {t: 'Toplam fiyat', w: 170}, {t: 'Not', w: 184}] :
+      [{t: 'Sıra', w: 70}, {t: 'İl', w: 120}, {t: 'İlçe', w: 140}, {t: 'Mahalle', w: 240}, {t: 'Ada', w: 80}, {t: 'Parsel', w: 90}, {t: 'Yüzölçümü', w: 200}, {t: 'Nitelik', w: 190}, {t: '₺/m²', w: 110}, {t: 'Toplam fiyat', w: 190}]) :
+      hasNote ?
       [{t: 'Sıra No', w: 100}, {t: 'İl', w: 120}, {t: 'İlçe', w: 140}, {t: 'Mahalle', w: 220}, {t: 'Ada', w: 80}, {t: 'Parsel', w: 90}, {t: 'Yüzölçümü', w: 220}, {t: 'Nitelik', w: 226}, {t: 'Not', w: 238}] :
       [{t: 'Sıra No', w: 110}, {t: 'İl', w: 160}, {t: 'İlçe', w: 190}, {t: 'Mahalle', w: 330}, {t: 'Ada', w: 100}, {t: 'Parsel', w: 110}, {t: 'Yüzölçümü', w: 190}, {t: 'Nitelik', w: 244}];
     var per = Math.floor((PH - HH - 70 - M) / RH);
@@ -1892,9 +1896,8 @@ function poleOf(g){
     var manualSum = items.reduce(function(a, r){ return a + (!r.feature && r.manualArea ? r.manualArea : 0); }, 0);
     var noAreaMiss = items.filter(function(r){ return !r.feature && !r.manualArea; }).length;
     var nFound = items.filter(function(r){ return r.feature; }).length, nMiss = items.length - nFound;
-    var showPrice = $('outPrice').checked && items.some(function(r){ return totalOf(r) > 0; });
     var priceFound = items.reduce(function(a, r){ return a + (r.feature ? totalOf(r) : 0); }, 0), priceAll = items.reduce(function(a, r){ return a + totalOf(r); }, 0);
-    var priceX = cols.slice(0, 7).reduce(function(a, c){ return a + c.w; }, 0) + 8;
+    var priceX = cols.slice(0, 9).reduce(function(a, c){ return a + c.w; }, 0) + 8;
     var grp = colorGroups(items), anyCol = items.some(function(r){ return r.feature && r.color; });
     var rowsAll = items.concat(nMiss ? [{_total: 1}, {_total: 2}] : [{_total: 1}]).concat(anyCol ? [{_ghead: 1}].concat(grp.map(function(g){ return {_grp: g}; })) : []), np = Math.max(1, Math.ceil(rowsAll.length / per));
     function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
@@ -1927,7 +1930,7 @@ function poleOf(g){
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
           x.fillText(g.name + ' · ' + g.n + ' parsel', M + 62, y + RH / 2);
           x.fillText(fmtArea(g.area), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
-          if (showPrice && g.price > 0) x.fillText(fit(x, fmtTL(g.price), cols[7].w), M + priceX, y + RH / 2);
+          if (showPrice && g.price > 0) x.fillText(fit(x, fmtTL(g.price), cols[9].w), M + priceX, y + RH / 2);
           x.strokeStyle = '#dfe8ea'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
@@ -1937,13 +1940,15 @@ function poleOf(g){
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
           x.fillText(r._total === 2 ? 'Genel toplam (' + items.length + ' parsel, bulunamayanlar dahil)' : (nMiss ? 'Bulunan parsellerin toplamı (' : 'Toplam (') + nFound + ' parsel)', M + cols[0].w + 8, y + RH / 2);
           x.fillText(fmtArea(r._total === 2 ? total + manualSum : total) + (r._total === 2 && noAreaMiss ? '*' : ''), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
-          if (showPrice) x.fillText(fit(x, fmtTL(r._total === 2 ? priceAll : priceFound), cols[7].w), M + priceX, y + RH / 2);
+          if (showPrice) x.fillText(fit(x, fmtTL(r._total === 2 ? priceAll : priceFound), cols[9].w), M + priceX, y + RH / 2);
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
         }
         if (i % 2) { x.fillStyle = '#f3f6f7'; x.fillRect(M, y, PW - 2 * M, RH); }
         var p = r.props || {};
-        var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik']), r.userNote || ''];
+        var vals = [pg * per + i + 1, r.il, r.ilce, r.mah, r.ada, r.parsel, fmtArea(prop(p, ['alan', 'tapuAlani', 'yuzolcumu'])), prop(p, ['nitelik'])];
+        if (showPrice) vals.push(r.priceM2 ? r.priceM2.toLocaleString('tr-TR', {maximumFractionDigits: 2}) : '', totalOf(r) > 0 ? fmtTL(totalOf(r)) : '');
+        vals.push(r.userNote || '');
         var miss = !r.feature;
         if (miss) { vals[6] = r.manualArea ? fmtArea(r.manualArea) + ' (elle)' : ''; vals[7] = r.status === 'yok' ? 'BULUNAMADI' : 'SORGULANAMADI'; x.fillStyle = '#fdecea'; x.fillRect(M, y, PW - 2 * M, RH); }
         cols.forEach(function(col, k){

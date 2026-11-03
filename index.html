@@ -337,6 +337,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <label class="check"><input type="checkbox" id="outLabels"> Çıktıda ada/parsel etiketlerini göster</label>
       <label class="check"><input type="checkbox" id="outList" checked> PDF'e parsel listesi sayfası ekle</label>
+      <label class="check"><input type="checkbox" id="outPrice"> Listede toplam fiyatı da göster (m² fiyatı girilmişse; renk toplamlarında da)</label>
       <label class="check"><input type="checkbox" id="outMiss" checked> Listeye bulunamayan parselleri de ekle (karşısına not düşülür)</label>
       <button class="primary" id="btnExport" type="button">Çıktı al</button>
       <p class="hint">Altlık olarak ekrandaki seçim (harita, uydu, uydu ve yer adları) kullanılır. Telefonda bellek yetmezse kalite kendiliğinden düşürülüp yeniden denenir.</p>
@@ -417,7 +418,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 03.11 · m² fiyatı</summary>
+        <summary>Ayarlar · sürüm 03.11 · renk bazında fiyat</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1005,8 +1006,8 @@ function poleOf(g){
     list.forEach(function(r){
       if (!r.feature || r.hidden) return;
       var c = String(r.color || def).toLowerCase();
-      if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0}; out.push(map[c]); }
-      map[c].n++; map[c].area += areaOf(r);
+      if (!map[c]) { map[c] = {color: c, name: COLOR_NAMES[c] || c.toUpperCase(), n: 0, area: 0, price: 0}; out.push(map[c]); }
+      map[c].n++; map[c].area += areaOf(r); map[c].price += totalOf(r);
     });
     return out;
   }
@@ -1015,9 +1016,10 @@ function poleOf(g){
     if (!box) return;
     if (!any || !g.length) { box.hidden = true; box.innerHTML = ''; return; }
     var tot = g.reduce(function(a, x){ return a + x.area; }, 0), n = g.reduce(function(a, x){ return a + x.n; }, 0);
-    box.innerHTML = '<h3>Renklere göre toplam yüzölçümü</h3><table>' + g.map(function(x){
-      return '<tr><td><span class="sw" style="background:' + esc(x.color) + '"></span> ' + esc(x.name) + '</td><td class="num">' + x.n + ' parsel</td><td class="num">' + esc(fmtArea(x.area)) + '</td></tr>';
-    }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td></tr></table>';
+    var ptot = g.reduce(function(a, x){ return a + x.price; }, 0), hp = ptot > 0;
+    box.innerHTML = '<h3>Renklere göre toplam yüzölçümü' + (hp ? ' ve fiyat' : '') + '</h3><table>' + g.map(function(x){
+      return '<tr><td><span class="sw" style="background:' + esc(x.color) + '"></span> ' + esc(x.name) + '</td><td class="num">' + x.n + ' parsel</td><td class="num">' + esc(fmtArea(x.area)) + '</td>' + (hp ? '<td class="num">' + (x.price > 0 ? esc(fmtTL(x.price)) : '') + '</td>' : '') + '</tr>';
+    }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td>' + (hp ? '<td class="num">' + esc(fmtTL(ptot)) + '</td>' : '') + '</tr></table>';
     box.hidden = false;
   }
   function parseNum(v){
@@ -1881,6 +1883,9 @@ function poleOf(g){
     var manualSum = items.reduce(function(a, r){ return a + (!r.feature && r.manualArea ? r.manualArea : 0); }, 0);
     var noAreaMiss = items.filter(function(r){ return !r.feature && !r.manualArea; }).length;
     var nFound = items.filter(function(r){ return r.feature; }).length, nMiss = items.length - nFound;
+    var showPrice = $('outPrice').checked && items.some(function(r){ return totalOf(r) > 0; });
+    var priceFound = items.reduce(function(a, r){ return a + (r.feature ? totalOf(r) : 0); }, 0), priceAll = items.reduce(function(a, r){ return a + totalOf(r); }, 0);
+    var priceX = cols.slice(0, 7).reduce(function(a, c){ return a + c.w; }, 0) + 8;
     var grp = colorGroups(items), anyCol = items.some(function(r){ return r.feature && r.color; });
     var rowsAll = items.concat(nMiss ? [{_total: 1}, {_total: 2}] : [{_total: 1}]).concat(anyCol ? [{_ghead: 1}].concat(grp.map(function(g){ return {_grp: g}; })) : []), np = Math.max(1, Math.ceil(rowsAll.length / per));
     function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
@@ -1894,14 +1899,14 @@ function poleOf(g){
       var y = HH, cx = M;
       x.fillStyle = '#dfe8ea'; x.fillRect(M, y, PW - 2 * M, RH);
       x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
-      cols.forEach(function(col){ x.fillText(col.t, cx + 8, y + RH / 2); cx += col.w; });
+      cols.forEach(function(col, k){ x.fillText(col.t, cx + 8, y + RH / 2); cx += col.w; });
       x.font = '400 24px system-ui, Arial, sans-serif';
       rowsAll.slice(pg * per, (pg + 1) * per).forEach(function(r, i){
         y += RH; cx = M;
         if (r._ghead) {
           x.fillStyle = '#0e5560'; x.fillRect(M, y, PW - 2 * M, RH);
           x.fillStyle = '#ffffff'; x.font = '700 24px system-ui, Arial, sans-serif';
-          x.fillText('Renklere göre toplam yüzölçümü', M + 8, y + RH / 2);
+          x.fillText('Renklere göre toplam yüzölçümü' + (showPrice ? ' ve fiyat' : ''), M + 8, y + RH / 2);
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
         }
@@ -1913,6 +1918,7 @@ function poleOf(g){
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
           x.fillText(g.name + ' · ' + g.n + ' parsel', M + 62, y + RH / 2);
           x.fillText(fmtArea(g.area), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
+          if (showPrice && g.price > 0) x.fillText(fit(x, fmtTL(g.price), cols[7].w), M + priceX, y + RH / 2);
           x.strokeStyle = '#dfe8ea'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
@@ -1922,6 +1928,7 @@ function poleOf(g){
           x.fillStyle = '#15262d'; x.font = '700 24px system-ui, Arial, sans-serif';
           x.fillText(r._total === 2 ? 'Genel toplam (' + items.length + ' parsel, bulunamayanlar dahil)' : (nMiss ? 'Bulunan parsellerin toplamı (' : 'Toplam (') + nFound + ' parsel)', M + cols[0].w + 8, y + RH / 2);
           x.fillText(fmtArea(r._total === 2 ? total + manualSum : total) + (r._total === 2 && noAreaMiss ? '*' : ''), M + cols[0].w + cols[1].w + cols[2].w + cols[3].w + cols[4].w + cols[5].w + 8, y + RH / 2);
+          if (showPrice) x.fillText(fit(x, fmtTL(r._total === 2 ? priceAll : priceFound), cols[7].w), M + priceX, y + RH / 2);
           x.font = '400 24px system-ui, Arial, sans-serif';
           return;
         }

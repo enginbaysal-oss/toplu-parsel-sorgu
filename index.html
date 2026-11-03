@@ -241,6 +241,10 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   tr.rowhid td:not(.acts){opacity:.45}
   tr.rowhid td.mono+td{text-decoration:line-through}
   input.manarea{width:84px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;text-align:right;box-sizing:border-box}
+  input.mprice{width:78px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;text-align:right;box-sizing:border-box}
+  td.ptot{white-space:nowrap;font-weight:600}
+  .pricesum{margin:8px 0;padding:8px 10px;border:1px solid #8a979c;border-radius:6px;font-size:14px;background:#fffdf3}
+  .pricesum .row{align-items:end;margin-top:6px}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
   .mu{font-size:12px;color:#586a72}
   .cmode{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:14px}
@@ -359,12 +363,21 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </details>
       <div class="tablewrap">
         <table>
-          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th>Not</th></tr></thead>
+          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th class="num">₺/m²</th><th class="num">Toplam fiyat</th><th>Not</th></tr></thead>
           <tbody id="tbody"></tbody>
         </table>
         <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
       </div>
       <div class="colorsum" id="colorSum" hidden></div>
+      <div class="pricesum" id="priceSum">
+        <b>m² fiyatı</b> <span class="hint" style="margin:0">Satırdaki ₺/m² kutusuna yazın, toplam fiyat otomatik hesaplanır.</span>
+        <div class="row">
+          <label class="f">Toplu m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
+          <button type="button" id="btnBulkPrice" class="ghost">İşaretlilere uygula (işaret yoksa tümüne)</button>
+          <button type="button" id="btnClearPrice" class="ghost">Fiyatları temizle</button>
+        </div>
+        <div id="priceTot" style="margin-top:6px"></div>
+      </div>
       <div class="colorbox">
         <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
         <div class="cmode" role="radiogroup" aria-label="Rengin uygulanacağı yer">
@@ -404,7 +417,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 01.11 · hassas yakınlaştırma</summary>
+        <summary>Ayarlar · sürüm 03.11 · m² fiyatı</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1007,8 +1020,24 @@ function poleOf(g){
     }).join('') + '<tr class="tot"><td>Genel toplam</td><td class="num">' + n + ' parsel</td><td class="num">' + esc(fmtArea(tot)) + '</td></tr></table>';
     box.hidden = false;
   }
+  function parseNum(v){
+    var t = String(v || '').trim().replace(/\s|₺|tl|m²|m2/gi, '');
+    if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+    var n = parseFloat(t); return isFinite(n) && n > 0 ? n : null;
+  }
+  function areaForPrice(r){ return r.feature ? areaOf(r) : (r.manualArea || 0); }
+  function totalOf(r){ return r.priceM2 ? areaForPrice(r) * r.priceM2 : 0; }
+  function fmtTL(n){ return n.toLocaleString('tr-TR', {maximumFractionDigits: 0}) + ' ₺'; }
+  function renderPriceTot(){
+    var box = $('priceTot'); if (!box) return;
+    var sum = 0, n = 0, ar = 0;
+    rows.forEach(function(r){ if (r.hidden || !r.priceM2) return; var t = totalOf(r); if (t > 0) { sum += t; n++; ar += areaForPrice(r); } });
+    box.innerHTML = n ? '<b>Toplam fiyat: ' + esc(fmtTL(sum)) + '</b> · ' + n + ' parsel · ' + esc(fmtArea(ar)) + (ar ? ' · ortalama ' + esc(fmtTL(sum / ar)) + '/m²' : '') : '';
+  }
   function renderTable(){
     renderColorSum();
+    renderPriceTot();
     var html = '';
     rows.forEach(function(r, i){
       var area = r.props ? fmtArea(prop(r.props, ['alan', 'tapuAlani', 'yuzolcumu'])) : '';
@@ -1022,6 +1051,8 @@ function poleOf(g){
         '<td><span class="chip ' + r.status + '">' + STATUS[r.status] + '</span>' + (r.note ? '<span class="why">' + esc(r.note) + '</span>' : '') + '</td>' +
         '<td class="num">' + (!r.feature && (r.status === 'yok' || r.status === 'hata') ?
           '<input type="text" class="manarea" inputmode="decimal" placeholder="alan" aria-label="Yüzölçümü (elle, m²)" value="' + (r.manualArea ? esc(String(r.manualArea).replace('.', ',')) : '') + '"> <span class="mu">m²</span>' : esc(area)) + '</td>' +
+        '<td class="num"><input type="text" class="mprice" inputmode="decimal" placeholder="₺/m²" aria-label="m² fiyatı (₺)" value="' + (r.priceM2 ? esc(String(r.priceM2).replace('.', ',')) : '') + '"></td>' +
+        '<td class="num ptot">' + (totalOf(r) > 0 ? esc(fmtTL(totalOf(r))) : '') + '</td>' +
         '<td><input type="text" class="usernote" maxlength="200" placeholder="Not" aria-label="Parsel notu" value="' + esc(r.userNote || '') + '"></td></tr>';
     });
     $('tbody').innerHTML = html;
@@ -1062,7 +1093,7 @@ function poleOf(g){
   $('tbody').addEventListener('click', function(e){
     var tr = e.target.closest('tr'); if (!tr) return;
     var r = rows[+tr.dataset.i];
-    if (e.target.classList.contains('manarea') || e.target.classList.contains('usernote')) return;
+    if (e.target.classList.contains('manarea') || e.target.classList.contains('usernote') || e.target.classList.contains('mprice')) return;
     var bt = e.target.closest('.rb');
     if (bt && bt.classList.contains('rb-eye')) { setHidden(r, !r.hidden); renderTable(); return; }
     if (bt && bt.classList.contains('rb-del')) { if (confirm((r.mah || '') + ' ' + r.ada + '/' + r.parsel + ' satırı silinsin mi?')) { deleteRow(r); renderTable(); } return; }
@@ -1074,6 +1105,10 @@ function poleOf(g){
       var tr0 = e.target.closest('tr'); if (!tr0) return;
       rows[+tr0.dataset.i].userNote = String(e.target.value || '').trim(); saveRowsSoon(); return;
     }
+    if (e.target.classList.contains('mprice')) {
+      var tr1 = e.target.closest('tr'); if (!tr1) return;
+      rows[+tr1.dataset.i].priceM2 = parseNum(e.target.value); renderTable(); saveRowsSoon(); return;
+    }
     if (!e.target.classList.contains('manarea')) return;
     var tr = e.target.closest('tr'); if (!tr) return; var r = rows[+tr.dataset.i];
     var t = String(e.target.value || '').trim().replace(/\s|m²|m2/gi, '');
@@ -1082,6 +1117,15 @@ function poleOf(g){
     var n = parseFloat(t);
     r.manualArea = isFinite(n) && n > 0 ? n : null;
     renderTable();
+  });
+  $('btnBulkPrice').addEventListener('click', function(){
+    var v = parseNum($('bulkPrice').value); if (!v) { showNotice('Önce geçerli bir m² fiyatı yazın.'); return; }
+    var c = rows.filter(function(r){ return r.checked; }); if (!c.length) c = rows.slice();
+    c.forEach(function(r){ r.priceM2 = v; }); renderTable(); saveRows();
+  });
+  $('btnClearPrice').addEventListener('click', function(){
+    if (!rows.some(function(r){ return r.priceM2; })) return;
+    if (confirm('Tüm m² fiyatları temizlensin mi?')) { rows.forEach(function(r){ r.priceM2 = null; }); renderTable(); saveRows(); }
   });
   $('chkAll').addEventListener('change', function(){
     var on = this.checked;
@@ -1330,9 +1374,10 @@ function poleOf(g){
       if (r.hidden) p.gizli = true;
       if (r.lineColor) p.cizgi_renk = r.lineColor;
       if (r.hatch) p.tarama = r.hatch;
+      if (r.priceM2) p.m2_fiyat = r.priceM2;
       return {type: 'Feature', geometry: r.feature.geometry, properties: p};
     }), bulunamayanlar: rows.filter(function(r){ return !r.feature; }).map(function(r){
-      return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null};
+      return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null, m2_fiyat: r.priceM2 || null};
     })};
     return JSON.stringify(fc);
   }
@@ -1364,10 +1409,10 @@ function poleOf(g){
   });
   $('btnCsv').addEventListener('click', function(){
     var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
-    var lines = [['İl', 'İlçe', 'Mahalle', 'Ada', 'Parsel', 'Durum', 'Alan (m²)', 'Nitelik', 'Not', 'Kullanıcı notu'].map(q).join(';')];
+    var lines = [['İl', 'İlçe', 'Mahalle', 'Ada', 'Parsel', 'Durum', 'Alan (m²)', 'Nitelik', 'Not', 'Kullanıcı notu', 'm² fiyatı (₺)', 'Toplam fiyat (₺)'].map(q).join(';')];
     rows.forEach(function(r){
       var p = r.props || {};
-      lines.push([r.il, r.ilce, r.mah, r.ada, r.parsel, STATUS[r.status], prop(p, ['alan']) || r.manualArea || '', prop(p, ['nitelik']), r.note, r.userNote || ''].map(q).join(';'));
+      lines.push([r.il, r.ilce, r.mah, r.ada, r.parsel, STATUS[r.status], prop(p, ['alan']) || r.manualArea || '', prop(p, ['nitelik']), r.note, r.userNote || '', r.priceM2 || '', totalOf(r) > 0 ? Math.round(totalOf(r)) : ''].map(q).join(';'));
     });
     download('parsel-sonuclari.csv', '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
   });
@@ -1388,13 +1433,13 @@ function poleOf(g){
           var r = {il: String(prop(p, ['ilAd', 'girdi_il'])), ilce: String(prop(p, ['ilceAd', 'girdi_ilce'])), mah: String(prop(p, ['mahalleAd', 'girdi_mahalle', 'name'])),
             ada: String(prop(p, ['adaNo', 'ada', 'girdi_ada']) || '-'), parsel: String(prop(p, ['parselNo', 'parsel', 'girdi_parsel']) || (i + 1)),
             status: 'bulundu', note: 'Dosyadan alındı', feature: f, props: p, layer: null, color: /^#[0-9a-fA-F]{6}$/.test(p.renk || '') ? p.renk : null,
-            hidden: p.gizli === true, userNote: String(p.not || ''), lineColor: /^#[0-9a-fA-F]{6}$/.test(p.cizgi_renk || '') ? p.cizgi_renk : null, hatch: hatchValid(p.tarama) ? p.tarama : null};
+            hidden: p.gizli === true, userNote: String(p.not || ''), lineColor: /^#[0-9a-fA-F]{6}$/.test(p.cizgi_renk || '') ? p.cizgi_renk : null, hatch: hatchValid(p.tarama) ? p.tarama : null, priceM2: p.m2_fiyat > 0 ? +p.m2_fiyat : null};
           rows.push(r); drawRow(r);
         });
         (Array.isArray(j.bulunamayanlar) ? j.bulunamayanlar : []).forEach(function(o){
           rows.push({il: String(o.il || ''), ilce: String(o.ilce || ''), mah: String(o.mah || ''), ada: String(o.ada || ''), parsel: String(o.parsel || ''),
             status: o.durum === 'hata' ? 'hata' : 'yok', note: o.durum === 'hata' ? 'Yedekten alındı' : '', feature: null, props: null, layer: null,
-            userNote: String(o.not || ''), manualArea: o.elle_alan > 0 ? +o.elle_alan : null});
+            userNote: String(o.not || ''), manualArea: o.elle_alan > 0 ? +o.elle_alan : null, priceM2: o.m2_fiyat > 0 ? +o.m2_fiyat : null});
         });
         showNotice(feats.length + ' parsel yedekten yüklendi (önceki sonuçların yerine).', true); renderTable(); fitAll();
       } catch (err) { showNotice('Dosya açılamadı: ' + err.message); }
@@ -1992,7 +2037,7 @@ function poleOf(g){
     try {
       var slim = rows.map(function(r){
         return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel,
-          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || '', lineColor: r.lineColor || null, hatch: r.hatch || null};
+          status: r.status, note: r.note, feature: r.feature, props: r.props, color: r.color || null, hidden: !!r.hidden, manualArea: r.manualArea || null, userNote: r.userNote || '', lineColor: r.lineColor || null, hatch: r.hatch || null, priceM2: r.priceM2 || null};
       });
       localStorage.setItem(ROWS_KEY, JSON.stringify(slim));
     } catch (e) {
@@ -2008,7 +2053,7 @@ function poleOf(g){
         var pending = o.status === 'bekliyor' || o.status === 'sorgulaniyor';
         var r = {il: o.il, ilce: o.ilce, mah: o.mah, ada: o.ada, parsel: o.parsel,
           status: pending ? 'hata' : (o.status || 'hata'), note: pending ? 'Sorgu yarım kaldı, yeniden deneyin' : (o.note || ''),
-          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || '', lineColor: o.lineColor || null, hatch: o.hatch || null};
+          feature: o.feature || null, props: o.props || null, layer: null, color: o.color || null, hidden: !!o.hidden, manualArea: o.manualArea || null, userNote: o.userNote || '', lineColor: o.lineColor || null, hatch: o.hatch || null, priceM2: o.priceM2 || null};
         rows.push(r);
         if (r.feature) drawRow(r);
       });

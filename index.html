@@ -522,7 +522,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 04.11 · teklif</summary>
+        <summary>Ayarlar · sürüm 05.11 · teklif</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2560,7 +2560,7 @@ function poleOf(g){
     var dt = new Date(), z2 = function(n){ return String(n).padStart(2, '0'); };
     var stamp = dt.getFullYear() + z2(dt.getMonth() + 1) + z2(dt.getDate()) + '-' + z2(dt.getHours()) + z2(dt.getMinutes());
     var days = parseInt($('ofDays').value, 10) || 0, vd = new Date(dt.getTime() + days * 86400000);
-    var meta = {no: 'TKL-' + stamp, date: dt.toLocaleDateString('tr-TR'), to: $('ofTo').value.trim(), from: $('ofFrom').value.trim(), terms: $('ofTerms').value.trim(),
+    var meta = {no: 'TKL-' + z2(dt.getDate()) + z2(dt.getMonth() + 1) + dt.getFullYear() + '-' + z2(dt.getHours()) + z2(dt.getMinutes()), date: dt.toLocaleDateString('tr-TR'), to: $('ofTo').value.trim(), from: $('ofFrom').value.trim(), terms: $('ofTerms').value.trim(),
       valid: days > 0 ? vd.toLocaleDateString('tr-TR') + ' tarihine kadar' : ''};
     var res = null;
     try {

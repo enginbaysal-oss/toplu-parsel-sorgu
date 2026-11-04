@@ -522,7 +522,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 05.11 · teklif 2</summary>
+        <summary>Ayarlar · sürüm 05.11 · teklif 3</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2418,7 +2418,9 @@ function poleOf(g){
       var acc = 0; lines.forEach(function(l, i){ l.t = area ? Math.round(total * l.a / area) : 0; acc += l.t; });
       if (lines.length && area) lines[lines.length - 1].t += total - acc;
     }
-    return {off: off, others: others, mode: mode, val: val, area: area, unit: unit, total: total, lines: lines, missArea: off.filter(function(r){ return !areaOf(r); }).length};
+    var askTotal = 0, cmpOffer = 0, askN = 0;
+    lines.forEach(function(l){ l.au = l.r.priceM2 || 0; l.at = l.au ? Math.round(l.a * l.au) : 0; if (l.at > 0) { askTotal += l.at; cmpOffer += l.t; askN++; } });
+    return {hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 ? l.a : 0); }, 0), off: off, others: others, mode: mode, val: val, area: area, unit: unit, total: total, lines: lines, missArea: off.filter(function(r){ return !areaOf(r); }).length};
   }
   function syncOffer(){
     var d = offerData();
@@ -2434,7 +2436,14 @@ function poleOf(g){
   try { var os = JSON.parse(localStorage.getItem(OKEY) || 'null'); if (os) Object.keys(os).forEach(function(k){ if ($(k)) $(k).value = os[k]; }); } catch (e) {}
   function renderOfferPages(d, meta){
     var PW = 1654, PH = 2339, M = 110, RH = 66, pages = [];
-    var cols = [{t: 'Sıra', w: 70}, {t: 'Mahalle / konum', w: 350}, {t: 'Ada / Parsel', w: 170}, {t: 'Nitelik', w: 220}, {t: 'Yüzölçümü', w: 210}, {t: '₺/m²', w: 190}, {t: 'Teklif tutarı', w: 224}];
+    var cols = d.hasAsk ?
+      [{k: 'no', t: 'Sıra', w: 60}, {k: 'mah', t: 'Mahalle / konum', w: 250}, {k: 'ap', t: 'Ada / Parsel', w: 140}, {k: 'area', t: 'Yüzölçümü', w: 150}, {k: 'au', t: 'Bizim ₺/m²', w: 140}, {k: 'ou', t: 'Teklif ₺/m²', w: 140}, {k: 'at', t: 'Bizim tutar', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 190}, {k: 'df', t: 'Fark', w: 174}] :
+      [{k: 'no', t: 'Sıra', w: 70}, {k: 'mah', t: 'Mahalle / konum', w: 350}, {k: 'ap', t: 'Ada / Parsel', w: 170}, {k: 'nit', t: 'Nitelik', w: 220}, {k: 'area', t: 'Yüzölçümü', w: 210}, {k: 'ou', t: '₺/m²', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 224}];
+    var NUM = {area: 1, au: 1, ou: 1, at: 1, ot: 1, df: 1};
+    var fm2 = function(v){ return v ? v.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—'; };
+    var fdiff = function(v){ return (v > 0 ? '+' : v < 0 ? '−' : '') + fmtTL(Math.abs(v)); };
+    var pct = function(o, a){ return a ? ((o - a) / a * 100) : 0; };
+    var fpct = function(v){ return (v > 0 ? '+' : v < 0 ? '−' : '') + '%' + Math.abs(v).toLocaleString('tr-TR', {maximumFractionDigits: 1}); };
     var F = function(w, sz){ return w + ' ' + sz + 'px system-ui, Arial, sans-serif'; };
     function newPage(first){
       var c = document.createElement('canvas'); c.width = PW; c.height = PH; var x = c.getContext('2d');
@@ -2471,7 +2480,7 @@ function poleOf(g){
     });
     y += 214 + 30;
     // özet kutucukları
-    var tw = (PW - 2 * M - 40) / 3, tiles = [['Teklif konusu parsel', d.lines.length + ' adet'], ['Toplam yüzölçümü', fmtArea(d.area)], ['Teklif m² fiyatı', d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺']];
+    var tw = (PW - 2 * M - 40) / 3, tiles = [['Teklif konusu parsel', d.lines.length + ' adet'], ['Toplam yüzölçümü', fmtArea(d.area)], [d.hasAsk ? 'm² fiyatı: bizim → teklif' : 'Teklif m² fiyatı', d.hasAsk ? (d.askTotal && d.area ? fm2(d.askTotal / d.askArea) : '—') + ' → ' + fm2(d.unit) : d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺']];
     tiles.forEach(function(t, i){
       var tx = M + i * (tw + 20);
       x.fillStyle = '#ffffff'; x.fillRect(tx, y, tw, 124); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(tx, y, tw, 124);
@@ -2486,10 +2495,20 @@ function poleOf(g){
     x.fillStyle = '#15262d'; x.font = F(500, 23); x.textAlign = 'left';
     wrap(x, 'Yalnızca ' + trWords(d.total) + ' Türk Lirası\'dır.', PW - 2 * M).forEach(function(ln, i){ x.fillText(ln, M, y + 12 + i * 32); y += 0; });
     y += 70;
+    if (d.hasAsk) {
+      var dv = d.cmpOffer - d.askTotal, pv = pct(d.cmpOffer, d.askTotal), bw3 = (PW - 2 * M - 40) / 3;
+      [['Bizim fiyatımız (toplam)', fmtTL(d.askTotal), BRAND], ['Teklif edilen (aynı parseller)', fmtTL(d.cmpOffer), BRAND], ['Fark (teklif − bizim)', fdiff(dv) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]].forEach(function(t, i){
+        var tx = M + i * (bw3 + 20);
+        x.fillStyle = '#f1f5fa'; x.fillRect(tx, y, bw3, 112); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(tx, y, bw3, 112);
+        x.fillStyle = '#586a72'; x.font = F(400, 22); x.textAlign = 'left'; x.fillText(t[0], tx + 24, y + 32);
+        x.fillStyle = t[2]; x.font = F(700, 34); x.fillText(t[1], tx + 24, y + 76);
+      });
+      y += 112 + 40;
+    }
     // tablo
     function head(x, y){
       x.fillStyle = '#dfe8f2'; x.fillRect(M, y, PW - 2 * M, 56); x.fillStyle = BRAND; x.font = F(700, 22); x.textBaseline = 'middle';
-      var cx = M; cols.forEach(function(c, k){ x.textAlign = k >= 4 ? 'right' : 'left'; x.fillText(c.t, k >= 4 ? cx + c.w - 14 : cx + 10, y + 28); cx += c.w; });
+      var cx = M; cols.forEach(function(c){ var nm = NUM[c.k]; x.textAlign = nm ? 'right' : 'left'; x.fillText(c.t, nm ? cx + c.w - 14 : cx + 10, y + 28); cx += c.w; });
     }
     head(x, y); y += 56;
     var LIM = PH - 150;
@@ -2498,15 +2517,20 @@ function poleOf(g){
       var r = l.r, p = r.props || {};
       if (i % 2) { x.fillStyle = '#f5f8fb'; x.fillRect(M, y, PW - 2 * M, RH); }
       x.strokeStyle = '#e1e8ef'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
-      var cx = M, vals = [String(i + 1), r.mah, r.ada + ' / ' + r.parsel, prop(p, ['nitelik']), l.a ? fmtArea(l.a) : '—', d.unit ? d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—', l.t ? fmtTL(l.t) : '—'];
-      cols.forEach(function(c, k){
-        x.fillStyle = '#15262d'; x.textAlign = k >= 4 ? 'right' : 'left'; x.textBaseline = 'middle';
-        if (k === 1) {
-          x.font = F(600, 23); x.fillText(fit(x, vals[1], c.w), cx + 10, y + 22);
+      var cx = M, dfv = l.at > 0 ? l.t - l.at : 0;
+      var vals = {no: String(i + 1), mah: r.mah, ap: r.ada + ' / ' + r.parsel, nit: prop(p, ['nitelik']), area: l.a ? fmtArea(l.a) : '—', au: fm2(l.au), ou: fm2(d.unit), at: l.at ? fmtTL(l.at) : '—', ot: l.t ? fmtTL(l.t) : '—', df: l.at > 0 ? fdiff(dfv) : '—'};
+      cols.forEach(function(c){
+        var nm = NUM[c.k], k = c.k;
+        x.fillStyle = '#15262d'; x.textAlign = nm ? 'right' : 'left'; x.textBaseline = 'middle';
+        if (k === 'mah') {
+          x.font = F(600, 23); x.fillText(fit(x, vals.mah, c.w), cx + 10, y + 22);
           x.font = F(400, 18); x.fillStyle = '#586a72';
-          x.fillText(fit(x, [r.ilce, r.il].filter(Boolean).join(', ') + (prop(p, ['mevkii']) ? ' · ' + prop(p, ['mevkii']) : '') + (prop(p, ['pafta', 'paftaNo']) ? ' · Pafta ' + prop(p, ['pafta', 'paftaNo']) : ''), c.w), cx + 10, y + 47);
+          x.fillText(fit(x, [r.ilce, r.il].filter(Boolean).join(', ') + (d.hasAsk && prop(p, ['nitelik']) ? ' · ' + prop(p, ['nitelik']) : '') + (prop(p, ['mevkii']) ? ' · ' + prop(p, ['mevkii']) : '') + (prop(p, ['pafta', 'paftaNo']) ? ' · Pafta ' + prop(p, ['pafta', 'paftaNo']) : ''), c.w), cx + 10, y + 47);
+        } else if (k === 'df') {
+          x.fillStyle = l.at > 0 ? (dfv < 0 ? '#b3261e' : dfv > 0 ? '#1b7a3a' : '#15262d') : '#15262d'; x.font = F(700, 22); x.fillText(vals.df, cx + c.w - 14, y + (l.at > 0 ? 22 : RH / 2));
+          if (l.at > 0) { x.font = F(400, 18); x.fillText(fpct(pct(l.t, l.at)), cx + c.w - 14, y + 47); }
         } else {
-          x.font = F(k === 6 ? 700 : 400, 23); x.fillText(k >= 4 ? vals[k] : fit(x, vals[k], c.w), k >= 4 ? cx + c.w - 14 : cx + 10, y + RH / 2);
+          x.font = F(k === 'ot' ? 700 : 400, 23); x.fillText(nm ? vals[k] : fit(x, vals[k], c.w), nm ? cx + c.w - 14 : cx + 10, y + RH / 2);
         }
         cx += c.w;
       });
@@ -2517,11 +2541,19 @@ function poleOf(g){
     x.fillStyle = '#dfe8f2'; x.fillRect(M, y, PW - 2 * M, RH); x.fillStyle = '#15262d'; x.textBaseline = 'middle'; x.font = F(700, 24);
     x.textAlign = 'left'; x.fillText('TOPLAM', M + 10, y + RH / 2);
     x.textAlign = 'right';
-    var ax = M + cols[0].w + cols[1].w + cols[2].w + cols[3].w;
-    x.fillText(fmtArea(d.area), ax + cols[4].w - 14, y + RH / 2);
-    x.fillText(d.unit ? d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—', ax + cols[4].w + cols[5].w - 14, y + RH / 2);
-    x.fillText(fmtTL(d.total), ax + cols[4].w + cols[5].w + cols[6].w - 14, y + RH / 2);
+    var tcx = M;
+    cols.forEach(function(c){
+      var tv = c.k === 'area' ? fmtArea(d.area) : c.k === 'ou' ? fm2(d.unit) : c.k === 'ot' ? fmtTL(d.total) : '';
+      if (d.hasAsk) {
+        if (c.k === 'au') tv = d.askArea ? fm2(d.askTotal / d.askArea) : '—';
+        if (c.k === 'at') tv = fmtTL(d.askTotal);
+        if (c.k === 'df') tv = fdiff(d.cmpOffer - d.askTotal);
+      }
+      if (tv) x.fillText(tv, tcx + c.w - 14, y + RH / 2);
+      tcx += c.w;
+    });
     y += RH + 14;
+    if (d.hasAsk && d.askN < d.lines.length) { x.textAlign = 'left'; x.fillStyle = '#586a72'; x.font = F(400, 21); x.fillText('* Fiyatımız girilmemiş ' + (d.lines.length - d.askN) + ' parsel, fark ve karşılaştırma toplamlarına dahil değildir.', M, y + 12); y += 40; }
     if (d.missArea) { x.textAlign = 'left'; x.fillStyle = '#b3261e'; x.font = F(400, 21); x.fillText('* ' + d.missArea + ' parselin yüzölçümü bulunamadığı için tutar hesaplanamadı.', M, y + 12); y += 40; }
     // şartlar
     if (meta.terms) {

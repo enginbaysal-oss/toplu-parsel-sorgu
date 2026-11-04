@@ -285,6 +285,12 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   .optdd summary{text-transform:none;letter-spacing:0;font-weight:400;color:var(--ink);cursor:pointer;padding:8px 10px;font-size:14px;list-style:none;display:flex;justify-content:space-between;gap:8px}
   .optdd summary::after{content:'▾';color:var(--muted)}
   .optdd[open] summary::after{content:'▴'}
+  .arclist{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+  .arc{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  .arc .ai{flex:1;min-width:0}
+  .arc .an{font-weight:600;overflow-wrap:anywhere}
+  .arc .am{font-size:12px;color:var(--muted)}
+  .arc button{padding:6px 10px;min-height:0;font-size:12.5px;box-shadow:inset 0 1px 0 var(--btn-hi),0 2px 0 var(--btn-edge)}
   .brandf{display:flex;flex-direction:column;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
   .optdd .check{padding:6px 10px;border-top:1px solid var(--line)}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
@@ -346,6 +352,16 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         </div>
         <div id="priceTot" style="margin-top:6px"></div>
       </div>
+    </section>
+
+    <section>
+      <h2>Arşiv</h2>
+      <div class="row">
+        <label class="f grow">Kayıt adı<input type="text" id="arcName" maxlength="80" placeholder="Örn. Ahmet Bey – Soma 196 ada" autocomplete="off"></label>
+        <button type="button" id="btnArcSave" disabled>Arşive kaydet</button>
+      </div>
+      <div id="arcList" class="arclist"></div>
+      <p class="hint">Kayıtlar bu cihazda saklanır, dosya aramanıza gerek kalmaz. Açınca mevcut liste yerine gelir.</p>
     </section>
 
     <section>
@@ -484,7 +500,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 04.11 · 3B düğme</summary>
+        <summary>Ayarlar · sürüm 04.11 · arşiv</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1150,7 +1166,7 @@ function poleOf(g){
     var found = cnt.bulundu > 0;
     $('btnGeo').disabled = $('btnKml').disabled = $('btnCsv').disabled = !rows.length;
     $('btnGeo').disabled = $('btnKml').disabled = !found;
-    syncDl();
+    syncDl(); syncArc();
     $('btnExport').disabled = !found || exporting;
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
@@ -1598,9 +1614,13 @@ function poleOf(g){
   $('btnImport').addEventListener('click', function(){ $('fileImport').click(); });
   function readGeoFile(file){
     var fr = new FileReader();
-    fr.onload = function(){
+    fr.onload = function(){ applyGeoText(String(fr.result), 'yedekten yüklendi (önceki sonuçların yerine).'); };
+    fr.readAsText(file);
+  }
+  function applyGeoText(text, doneMsg){
+    {
       try {
-        var j = JSON.parse(String(fr.result).replace(/^\uFEFF/, '').trim());
+        var j = JSON.parse(String(text).replace(/^\uFEFF/, '').trim());
         var feats = j.type === 'FeatureCollection' ? j.features : j.type === 'Feature' ? [j] : [];
         feats = feats.filter(function(f){ return f && f.geometry && /Polygon/.test(f.geometry.type); });
         if (!feats.length) throw new Error('Dosyada çokgen (Polygon) bulunamadı.');
@@ -1620,11 +1640,66 @@ function poleOf(g){
             status: o.durum === 'hata' ? 'hata' : 'yok', note: o.durum === 'hata' ? 'Yedekten alındı' : '', feature: null, props: null, layer: null,
             userNote: String(o.not || ''), manualArea: o.elle_alan > 0 ? +o.elle_alan : null, priceM2: o.m2_fiyat > 0 ? +o.m2_fiyat : null});
         });
-        showNotice(feats.length + ' parsel yedekten yüklendi (önceki sonuçların yerine).', true); renderTable(); fitAll();
+        showNotice(feats.length + ' parsel ' + doneMsg, true); renderTable(); fitAll(); saveRows();
       } catch (err) { showNotice('Dosya açılamadı: ' + err.message); }
-    };
-    fr.readAsText(file);
+    }
   }
+  /* ---------- arşiv (IndexedDB) ---------- */
+  var arcDb = null;
+  function arcOpen(){
+    return new Promise(function(res, rej){
+      if (arcDb) return res(arcDb);
+      if (!window.indexedDB) return rej(new Error('Bu cihaz arşiv depolamayı desteklemiyor.'));
+      var rq = indexedDB.open('parsel-harita-arsiv', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('kayit', {keyPath: 'id'}); };
+      rq.onsuccess = function(){ arcDb = rq.result; res(arcDb); };
+      rq.onerror = function(){ rej(rq.error || new Error('Arşiv açılamadı.')); };
+    });
+  }
+  function arcTx(mode, fn){
+    return arcOpen().then(function(db){ return new Promise(function(res, rej){
+      var tx = db.transaction('kayit', mode), st = tx.objectStore('kayit'), out = fn(st);
+      tx.oncomplete = function(){ res(out && out.result !== undefined ? out.result : undefined); };
+      tx.onerror = tx.onabort = function(){ rej(tx.error || new Error('Arşiv işlemi başarısız.')); };
+    }); });
+  }
+  function arcAll(){ return arcTx('readonly', function(st){ return st.getAll(); }).then(function(a){ return (a || []).sort(function(x, y){ return y.ts - x.ts; }); }); }
+  function fmtDT(ts){ var d = new Date(ts), z = function(n){ return String(n).padStart(2, '0'); }; return z(d.getDate()) + '.' + z(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes()); }
+  function arcRender(){
+    arcAll().then(function(list){
+      $('arcList').innerHTML = list.length ? list.map(function(k){
+        return '<div class="arc" data-id="' + k.id + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + '</div></div>' +
+          '<button type="button" class="arc-open">Aç</button><button type="button" class="arc-del danger">Sil</button></div>';
+      }).join('') : '<div class="hint">Henüz kayıt yok.</div>';
+    }).catch(function(e){ $('arcList').innerHTML = '<div class="hint">' + esc(e.message) + '</div>'; });
+  }
+  function syncArc(){ $('btnArcSave').disabled = !rows.some(function(r){ return r.feature || r.status === 'yok' || r.status === 'hata'; }); }
+  $('btnArcSave').addEventListener('click', function(){
+    var nm = $('arcName').value.trim() || ($('outTitle').value.trim() || 'Parsel Haritası') + ' · ' + fmtDT(Date.now());
+    var found = rows.filter(function(r){ return r.feature; }).length, miss = rows.filter(function(r){ return !r.feature && (r.status === 'yok' || r.status === 'hata'); }).length;
+    arcAll().then(function(list){
+      var ex = list.filter(function(k){ return k.name === nm; })[0];
+      if (ex && !confirm('"' + nm + '" adlı kayıt var. Üzerine yazılsın mı?')) return null;
+      var rec = {id: ex ? ex.id : Date.now(), name: nm, ts: Date.now(), n: found, miss: miss, title: $('outTitle').value, text: geoText()};
+      return arcTx('readwrite', function(st){ return st.put(rec); }).then(function(){ showNotice('Arşive kaydedildi: ' + nm, true); $('arcName').value = ''; arcRender(); });
+    }).catch(function(e){ showNotice('Arşive kaydedilemedi: ' + e.message); });
+  });
+  $('arcList').addEventListener('click', function(e){
+    var box = e.target.closest('.arc'); if (!box) return;
+    var id = +box.dataset.id;
+    if (e.target.classList.contains('arc-open')) {
+      if (rows.length && !confirm('Mevcut liste kapatılıp bu kayıt açılsın mı? (İsterseniz önce "Arşive kaydet" ile saklayın.)')) return;
+      arcTx('readonly', function(st){ return st.get(id); }).then(function(k){
+        if (!k) throw new Error('Kayıt bulunamadı.');
+        if (k.title) { $('outTitle').value = k.title; }
+        applyGeoText(k.text, 'arşivden açıldı: ' + k.name);
+      }).catch(function(er){ showNotice('Kayıt açılamadı: ' + er.message); });
+    } else if (e.target.classList.contains('arc-del')) {
+      if (!confirm('Bu arşiv kaydı silinsin mi?')) return;
+      arcTx('readwrite', function(st){ return st.delete(id); }).then(arcRender).catch(function(er){ showNotice('Silinemedi: ' + er.message); });
+    }
+  });
+  arcRender();
   $('fileImport').addEventListener('change', function(e){ var f = e.target.files[0]; if (f) readGeoFile(f); e.target.value = ''; });
 
   /* ---------- tam ekran ---------- */

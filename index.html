@@ -403,6 +403,28 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
 
     <section>
+      <h2>Teklif çıktısı</h2>
+      <p class="hint">Tabloda <b>işaretli</b> parseller teklif konusu olur (hiçbiri işaretli değilse görünen tümü).</p>
+      <div class="row">
+        <label class="f grow">Muhatap (Sayın)<input type="text" id="ofTo" maxlength="80" autocomplete="off"></label>
+        <label class="f grow">Teklif veren<input type="text" id="ofFrom" maxlength="80" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <label class="f grow">Teklif türü
+          <select id="ofType"><option value="m2">m² birim fiyatı</option><option value="total">Toplam bedel</option></select>
+        </label>
+        <label class="f grow"><span id="ofValLbl">Teklif (₺/m²)</span><input type="text" id="ofVal" inputmode="decimal" placeholder="örn. 1.250" autocomplete="off"></label>
+        <label class="f" style="width:84px">Geçerlilik (gün)<input type="text" id="ofDays" inputmode="numeric" value="7" autocomplete="off"></label>
+      </div>
+      <label class="f">Şartlar / notlar (isteğe bağlı)<textarea id="ofTerms" rows="3" spellcheck="false" placeholder="Örn. Ödeme şekli, tapu masrafları, teslim tarihi…"></textarea></label>
+      <label class="f">Krokide
+        <select id="ofMap"><option value="only">Yalnız teklif parselleri görünsün</option><option value="all">Teklif parselleri + diğer parseller görünsün</option></select>
+      </label>
+      <div id="ofInfo" class="hint"></div>
+      <button class="cta" id="btnOffer" type="button" disabled>Teklif PDF'i al</button>
+    </section>
+
+    <section>
       <h2>Müşteri çıktısı</h2>
       <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası"></label>
       <div class="row">
@@ -500,7 +522,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 04.11 · arşiv paylaş</summary>
+        <summary>Ayarlar · sürüm 04.11 · teklif</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1166,7 +1188,7 @@ function poleOf(g){
     var found = cnt.bulundu > 0;
     $('btnGeo').disabled = $('btnKml').disabled = $('btnCsv').disabled = !rows.length;
     $('btnGeo').disabled = $('btnKml').disabled = !found;
-    syncDl(); syncArc();
+    syncDl(); syncArc(); syncOffer();
     $('btnExport').disabled = !found || exporting;
     $('btnRetry').disabled = running || !(cnt.hata || cnt.yok);
     $('btnRun').disabled = running;
@@ -1986,9 +2008,9 @@ function poleOf(g){
     x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath();
   }
   async function renderMapImage(o){
-    var items = foundRows();
+    var items = o.items || foundRows();
     var minLng = 181, maxLng = -181, minLat = 91, maxLat = -91;
-    items.forEach(function(r){ ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){
+    items.concat(o.fitAll && o.others ? o.others : []).forEach(function(r){ ringsOf(r.feature.geometry).forEach(function(poly){ poly[0].forEach(function(c){
       minLng = Math.min(minLng, c[0]); maxLng = Math.max(maxLng, c[0]); minLat = Math.min(minLat, c[1]); maxLat = Math.max(maxLat, c[1]);
     }); }); });
     if (minLng > maxLng) throw new Error('Çizilecek parsel yok');
@@ -2041,6 +2063,18 @@ function poleOf(g){
     var P = function(lng, lat){ var w = worldPx(lng, lat, z); return [w.x - ox, w.y - oy + hH]; };
     var lw = Math.max(3, 3.2 * u);
     ctx.save(); ctx.beginPath(); ctx.rect(0, hH, W, H); ctx.clip();
+    if (o.others && o.others.length) {
+      o.others.forEach(function(r){
+        ctx.beginPath();
+        ringsOf(r.feature.geometry).forEach(function(poly){ poly.forEach(function(ring){
+          ring.forEach(function(c, i){ var q = P(c[0], c[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]); });
+          ctx.closePath();
+        }); });
+        ctx.fillStyle = 'rgba(100,112,130,0.30)'; ctx.fill('evenodd');
+        ctx.lineJoin = 'round'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(3, 2.6 * u) + 2 * u; ctx.stroke();
+        ctx.strokeStyle = '#4d5a6e'; ctx.lineWidth = Math.max(2, 2 * u); ctx.stroke();
+      });
+    }
     items.slice().sort(function(a, b){ return (isBlack(a) ? 1 : 0) - (isBlack(b) ? 1 : 0); }).forEach(function(r){
       var color = r.color || globalColor, lcol = r.lineColor || color;
       ctx.beginPath();
@@ -2115,7 +2149,7 @@ function poleOf(g){
     ctx.font = '700 ' + Math.round(46 * u) + 'px system-ui, Arial, sans-serif'; ctx.fillText(o.title || 'Parsel Haritası', 36 * u, hH * 0.42);
     ctx.font = '400 ' + Math.round(24 * u) + 'px system-ui, Arial, sans-serif';
     var first = items[0], loc = [first.mah, first.ilce, first.il].filter(Boolean).join(' · ');
-    ctx.fillText(loc + (items.length > 1 ? '  ·  ' + items.length + ' parsel' : '  ·  ' + first.ada + ' ada ' + first.parsel + ' parsel'), 36 * u, hH * 0.76);
+    if (o.subtitle) ctx.fillText(o.subtitle, 36 * u, hH * 0.76); else ctx.fillText(loc + (items.length > 1 ? '  ·  ' + items.length + ' parsel' : '  ·  ' + first.ada + ' ada ' + first.parsel + ' parsel'), 36 * u, hH * 0.76);
     drawBrand(ctx, W - 36 * u, hH, u);
     ctx.textAlign = 'right'; ctx.fillText(new Date().toLocaleDateString('tr-TR'), W - 36 * u, hH * 0.42);
     // alt bant
@@ -2124,7 +2158,13 @@ function poleOf(g){
     ctx.fillRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
     ctx.strokeStyle = globalColor; ctx.lineWidth = 2 * u; ctx.strokeRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
     ctx.fillStyle = '#15262d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '500 ' + Math.round(21 * u) + 'px system-ui, Arial, sans-serif';
-    ctx.fillText('Sorgulanan parsel', 104 * u, hH + H + fH * 0.5);
+    ctx.fillText(o.legend1 || 'Sorgulanan parsel', 104 * u, hH + H + fH * 0.5);
+    if (o.others && o.others.length) {
+      var lx2 = 104 * u + ctx.measureText(o.legend1 || 'Sorgulanan parsel').width + 50 * u;
+      ctx.fillStyle = 'rgba(100,112,130,0.30)'; ctx.fillRect(lx2, hH + H + fH * 0.3, 54 * u, fH * 0.4);
+      ctx.strokeStyle = '#4d5a6e'; ctx.lineWidth = 2 * u; ctx.strokeRect(lx2, hH + H + fH * 0.3, 54 * u, fH * 0.4);
+      ctx.fillStyle = '#15262d'; ctx.fillText('Diğer parseller', lx2 + 68 * u, hH + H + fH * 0.5);
+    }
     ctx.textAlign = 'right'; ctx.font = '400 ' + Math.round(18 * u) + 'px system-ui, Arial, sans-serif';
     ctx.fillText('Sınırlar TKGM Parsel Sorgu verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez. Altlık: Esri', W - 36 * u, hH + H + fH * 0.5);
     return {canvas: cv, count: items.length, failed: failed, total: total, z: z};
@@ -2346,6 +2386,210 @@ function poleOf(g){
     var out = XLSX.write(wb, {type: 'array', bookType: 'xlsx'});
     return new Blob([out], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   }
+  /* ---------- teklif çıktısı ---------- */
+  function trWords(n){
+    n = Math.round(n); if (n === 0) return 'sıfır';
+    var ones = ['', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz'], tens = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli', 'altmış', 'yetmiş', 'seksen', 'doksan'], grp = ['', 'bin', 'milyon', 'milyar', 'trilyon'];
+    var parts = [], g = 0;
+    while (n > 0 && g < grp.length) {
+      var c = n % 1000; n = Math.floor(n / 1000);
+      if (c) {
+        var t = '', h = Math.floor(c / 100), te = Math.floor((c % 100) / 10), o = c % 10;
+        if (h) t += (h > 1 ? ones[h] : '') + 'yüz';
+        t += tens[te] + ones[o];
+        if (g === 1 && c === 1) t = ''; 
+        parts.unshift(t + grp[g]);
+      }
+      g++;
+    }
+    return parts.join(' ');
+  }
+  function offerData(){
+    var all = foundRows(), off = all.filter(function(r){ return r.checked; });
+    if (!off.length) off = all.slice();
+    var others = all.filter(function(r){ return off.indexOf(r) < 0; });
+    var mode = $('ofType').value, val = parseNum($('ofVal').value) || 0;
+    var area = off.reduce(function(a, r){ return a + areaOf(r); }, 0);
+    var lines = off.map(function(r){ return {r: r, a: areaOf(r), t: 0}; }), total = 0, unit = 0;
+    if (mode === 'm2') {
+      unit = val; lines.forEach(function(l){ l.t = Math.round(l.a * unit); total += l.t; });
+    } else {
+      total = Math.round(val); unit = area ? total / area : 0;
+      var acc = 0; lines.forEach(function(l, i){ l.t = area ? Math.round(total * l.a / area) : 0; acc += l.t; });
+      if (lines.length && area) lines[lines.length - 1].t += total - acc;
+    }
+    return {off: off, others: others, mode: mode, val: val, area: area, unit: unit, total: total, lines: lines, missArea: off.filter(function(r){ return !areaOf(r); }).length};
+  }
+  function syncOffer(){
+    var d = offerData();
+    $('ofValLbl').textContent = $('ofType').value === 'm2' ? 'Teklif (₺/m²)' : 'Teklif (toplam ₺)';
+    $('ofInfo').textContent = d.off.length ? d.off.length + ' parsel · ' + fmtArea(d.area) + (d.total > 0 ? ' · toplam ' + fmtTL(d.total) + ' · ' + d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺/m²' : '') + (d.others.length ? ' · krokide ' + d.others.length + ' diğer parsel seçilebilir' : '') : 'Önce parselleri sorgulayın.';
+    $('btnOffer').disabled = !d.off.length || !(d.val > 0);
+  }
+  var OKEY = 'parsel-harita-teklif-v1';
+  ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(id){
+    $(id).addEventListener('input', function(){ syncOffer(); try { var o = {}; ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(k){ o[k] = $(k).value; }); localStorage.setItem(OKEY, JSON.stringify(o)); } catch (e) {} });
+    $(id).addEventListener('change', function(){ syncOffer(); });
+  });
+  try { var os = JSON.parse(localStorage.getItem(OKEY) || 'null'); if (os) Object.keys(os).forEach(function(k){ if ($(k)) $(k).value = os[k]; }); } catch (e) {}
+  function renderOfferPages(d, meta){
+    var PW = 1654, PH = 2339, M = 110, RH = 66, pages = [];
+    var cols = [{t: 'Sıra', w: 70}, {t: 'Mahalle / konum', w: 350}, {t: 'Ada / Parsel', w: 170}, {t: 'Nitelik', w: 220}, {t: 'Yüzölçümü', w: 210}, {t: '₺/m²', w: 190}, {t: 'Teklif tutarı', w: 224}];
+    var F = function(w, sz){ return w + ' ' + sz + 'px system-ui, Arial, sans-serif'; };
+    function newPage(first){
+      var c = document.createElement('canvas'); c.width = PW; c.height = PH; var x = c.getContext('2d');
+      x.fillStyle = '#ffffff'; x.fillRect(0, 0, PW, PH);
+      x.fillStyle = BRAND; x.fillRect(0, 0, PW, 150);
+      x.fillStyle = '#ffffff'; x.textBaseline = 'middle'; x.textAlign = 'left';
+      x.font = F(700, 48); x.fillText('TEKLİF FORMU', M, 62);
+      x.font = F(400, 26); x.fillText('Teklif No: ' + meta.no + (first ? '  ·  ' + meta.date : '  (devam)'), M, 112);
+      drawBrand(x, PW - 60, 150, 1);
+      var P = {c: c, x: x}; pages.push(P); return P;
+    }
+    function fit(x, t, w){ t = String(t || ''); if (x.measureText(t).width <= w - 16) return t; while (t.length > 1 && x.measureText(t + '…').width > w - 16) t = t.slice(0, -1); return t + '…'; }
+    function wrap(x, text, w){
+      var out = [];
+      String(text || '').split(/\r?\n/).forEach(function(par){
+        var words = par.split(/\s+/).filter(Boolean), cur = '';
+        if (!words.length) { out.push(''); return; }
+        words.forEach(function(wd){ var t = cur ? cur + ' ' + wd : wd; if (x.measureText(t).width > w && cur) { out.push(cur); cur = wd; } else cur = t; });
+        out.push(cur);
+      });
+      return out;
+    }
+    var P = newPage(true), x = P.x, y = 190;
+    // bilgi kutusu
+    x.fillStyle = '#f1f5fa'; x.fillRect(M, y, PW - 2 * M, 214); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(M, y, PW - 2 * M, 214);
+    var half = (PW - 2 * M) / 2, left = [['Sayın', meta.to], ['Teklif veren', meta.from], ['Hazırlayan', [brand.agent, brand.firm].filter(Boolean).join(' · ')]],
+      right = [['Teklif tarihi', meta.date], ['Geçerlilik', meta.valid], ['Telefon / e-posta', [brand.phone, brand.mail].filter(Boolean).join('  ·  ')]];
+    [left, right].forEach(function(col, ci){
+      col.forEach(function(it, i){
+        var yy = y + 40 + i * 64, xx = M + 28 + ci * half;
+        x.textAlign = 'left'; x.fillStyle = '#586a72'; x.font = F(400, 21); x.fillText(it[0], xx, yy);
+        x.fillStyle = '#15262d'; x.font = F(600, 26); x.fillText(fit(x, it[1] || '—', half - 60), xx + 190, yy);
+      });
+    });
+    y += 214 + 30;
+    // özet kutucukları
+    var tw = (PW - 2 * M - 40) / 3, tiles = [['Teklif konusu parsel', d.lines.length + ' adet'], ['Toplam yüzölçümü', fmtArea(d.area)], ['Teklif m² fiyatı', d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺']];
+    tiles.forEach(function(t, i){
+      var tx = M + i * (tw + 20);
+      x.fillStyle = '#ffffff'; x.fillRect(tx, y, tw, 124); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(tx, y, tw, 124);
+      x.fillStyle = '#586a72'; x.font = F(400, 22); x.textAlign = 'left'; x.fillText(t[0], tx + 24, y + 34);
+      x.fillStyle = BRAND; x.font = F(700, 40); x.fillText(t[1], tx + 24, y + 82);
+    });
+    y += 124 + 24;
+    x.fillStyle = BRAND; x.fillRect(M, y, PW - 2 * M, 150);
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.font = F(600, 24); x.fillText('TOPLAM TEKLİF BEDELİ', M + 30, y + 40);
+    x.fillStyle = '#ffffff'; x.font = F(700, 70); x.fillText(fmtTL(d.total), M + 30, y + 98);
+    y += 150 + 22;
+    x.fillStyle = '#15262d'; x.font = F(500, 23); x.textAlign = 'left';
+    wrap(x, 'Yalnızca ' + trWords(d.total) + ' Türk Lirası\'dır.', PW - 2 * M).forEach(function(ln, i){ x.fillText(ln, M, y + 12 + i * 32); y += 0; });
+    y += 70;
+    // tablo
+    function head(x, y){
+      x.fillStyle = '#dfe8f2'; x.fillRect(M, y, PW - 2 * M, 56); x.fillStyle = BRAND; x.font = F(700, 22); x.textBaseline = 'middle';
+      var cx = M; cols.forEach(function(c, k){ x.textAlign = k >= 4 ? 'right' : 'left'; x.fillText(c.t, k >= 4 ? cx + c.w - 14 : cx + 10, y + 28); cx += c.w; });
+    }
+    head(x, y); y += 56;
+    var LIM = PH - 150;
+    d.lines.forEach(function(l, i){
+      if (y + RH > LIM) { P = newPage(false); x = P.x; y = 190; head(x, y); y += 56; }
+      var r = l.r, p = r.props || {};
+      if (i % 2) { x.fillStyle = '#f5f8fb'; x.fillRect(M, y, PW - 2 * M, RH); }
+      x.strokeStyle = '#e1e8ef'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
+      var cx = M, vals = [String(i + 1), r.mah, r.ada + ' / ' + r.parsel, prop(p, ['nitelik']), l.a ? fmtArea(l.a) : '—', d.unit ? d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—', l.t ? fmtTL(l.t) : '—'];
+      cols.forEach(function(c, k){
+        x.fillStyle = '#15262d'; x.textAlign = k >= 4 ? 'right' : 'left'; x.textBaseline = 'middle';
+        if (k === 1) {
+          x.font = F(600, 23); x.fillText(fit(x, vals[1], c.w), cx + 10, y + 22);
+          x.font = F(400, 18); x.fillStyle = '#586a72';
+          x.fillText(fit(x, [r.ilce, r.il].filter(Boolean).join(', ') + (prop(p, ['mevkii']) ? ' · ' + prop(p, ['mevkii']) : '') + (prop(p, ['pafta', 'paftaNo']) ? ' · Pafta ' + prop(p, ['pafta', 'paftaNo']) : ''), c.w), cx + 10, y + 47);
+        } else {
+          x.font = F(k === 6 ? 700 : 400, 23); x.fillText(k >= 4 ? vals[k] : fit(x, vals[k], c.w), k >= 4 ? cx + c.w - 14 : cx + 10, y + RH / 2);
+        }
+        cx += c.w;
+      });
+      y += RH;
+    });
+    // toplam satırı
+    if (y + RH > LIM) { P = newPage(false); x = P.x; y = 190; }
+    x.fillStyle = '#dfe8f2'; x.fillRect(M, y, PW - 2 * M, RH); x.fillStyle = '#15262d'; x.textBaseline = 'middle'; x.font = F(700, 24);
+    x.textAlign = 'left'; x.fillText('TOPLAM', M + 10, y + RH / 2);
+    x.textAlign = 'right';
+    var ax = M + cols[0].w + cols[1].w + cols[2].w + cols[3].w;
+    x.fillText(fmtArea(d.area), ax + cols[4].w - 14, y + RH / 2);
+    x.fillText(d.unit ? d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—', ax + cols[4].w + cols[5].w - 14, y + RH / 2);
+    x.fillText(fmtTL(d.total), ax + cols[4].w + cols[5].w + cols[6].w - 14, y + RH / 2);
+    y += RH + 14;
+    if (d.missArea) { x.textAlign = 'left'; x.fillStyle = '#b3261e'; x.font = F(400, 21); x.fillText('* ' + d.missArea + ' parselin yüzölçümü bulunamadığı için tutar hesaplanamadı.', M, y + 12); y += 40; }
+    // şartlar
+    if (meta.terms) {
+      x.font = F(400, 24); x.textAlign = 'left';
+      var tl = wrap(x, meta.terms, PW - 2 * M - 20), need = 70 + tl.length * 34;
+      if (y + need > LIM) { P = newPage(false); x = P.x; y = 190; }
+      x.fillStyle = BRAND; x.font = F(700, 26); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('Şartlar ve notlar', M, y + 24);
+      x.fillStyle = '#15262d'; x.font = F(400, 24);
+      tl.forEach(function(ln, i){ x.fillText(ln, M + 10, y + 70 + i * 34); });
+      y += need + 10;
+    }
+    // imza
+    if (y + 230 > LIM) { P = newPage(false); x = P.x; y = 190; }
+    y += 20;
+    var bw = (PW - 2 * M - 40) / 2;
+    [['Teklif veren', meta.from], ['Teklif sunulan (muhatap)', meta.to]].forEach(function(b, i){
+      var bx = M + i * (bw + 40);
+      x.strokeStyle = '#8a97a8'; x.lineWidth = 2; x.strokeRect(bx, y, bw, 190);
+      x.fillStyle = '#586a72'; x.font = F(600, 23); x.textAlign = 'left'; x.fillText(b[0], bx + 20, y + 34);
+      x.fillStyle = '#15262d'; x.font = F(400, 22); x.fillText(fit(x, b[1] || '', bw - 20), bx + 20, y + 70);
+      x.strokeStyle = '#cfd8e3'; x.beginPath(); x.moveTo(bx + 20, y + 150); x.lineTo(bx + bw - 20, y + 150); x.stroke();
+      x.fillStyle = '#8a97a8'; x.font = F(400, 18); x.fillText('Tarih / İmza', bx + 20, y + 172);
+    });
+    // alt bilgi
+    pages.forEach(function(pg, i){
+      var xx = pg.x; xx.fillStyle = '#586a72'; xx.font = F(400, 21); xx.textAlign = 'center'; xx.textBaseline = 'middle';
+      xx.fillText((brand.firm ? brand.firm + '  ·  ' : '') + 'Parsel sınırları TKGM verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez.  ·  Sayfa ' + (i + 1) + ' / ' + (pages.length + 1), PW / 2, PH - 50);
+    });
+    return pages.map(function(pg){ return pg.c; });
+  }
+  $('btnOffer').addEventListener('click', async function(){
+    var d = offerData();
+    if (!d.off.length) { showNotice('Önce parselleri sorgulayın.'); return; }
+    if (!(d.val > 0)) { showNotice('Teklif tutarını yazın.'); return; }
+    var btn = $('btnOffer'); btn.disabled = true; exporting = true; $('btnExport').disabled = true;
+    var dt = new Date(), z2 = function(n){ return String(n).padStart(2, '0'); };
+    var stamp = dt.getFullYear() + z2(dt.getMonth() + 1) + z2(dt.getDate()) + '-' + z2(dt.getHours()) + z2(dt.getMinutes());
+    var days = parseInt($('ofDays').value, 10) || 0, vd = new Date(dt.getTime() + days * 86400000);
+    var meta = {no: 'TKL-' + stamp, date: dt.toLocaleDateString('tr-TR'), to: $('ofTo').value.trim(), from: $('ofFrom').value.trim(), terms: $('ofTerms').value.trim(),
+      valid: days > 0 ? vd.toLocaleDateString('tr-TR') + ' tarihine kadar' : ''};
+    var res = null;
+    try {
+      showNotice('Teklif hazırlanıyor…', true);
+      var cap0 = window.Capacitor, isNat = !!(cap0 && cap0.isNativePlatform && cap0.isNativePlatform());
+      var budget = (parseInt($('outQ').value, 10) || 10000000) * (isNat ? 1 : 2.5), lastErr = null, withOthers = $('ofMap').value === 'all' && d.others.length > 0;
+      for (var attempt = 0; attempt < 3 && !res; attempt++) {
+        try {
+          res = await renderMapImage({title: 'Teklif Kroki · ' + meta.no, base: $('base').value, maxArea: budget, labels: true, items: d.off, others: withOthers ? d.others : [], fitAll: withOthers,
+            legend1: 'Teklif konusu parsel', subtitle: d.off.length + ' parsel teklif konusu' + (withOthers ? ' · ' + d.others.length + ' diğer parsel' : ''),
+            onProgress: function(pc){ showNotice('Kroki karoları indiriliyor… %' + pc, true); }});
+        } catch (e) { lastErr = e; res = null; budget = budget / 2.5; }
+      }
+      if (!res) throw lastErr || new Error('Kroki oluşturulamadı');
+      showNotice('PDF hazırlanıyor…', true);
+      await loadJsPdf();
+      var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta);
+      var doc = new JS({orientation: 'portrait', unit: 'mm', format: [210, 297], compress: true});
+      pgs.forEach(function(c, i){ if (i) doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
+      var cw = res.canvas.width, ch = res.canvas.height, long = 297, pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
+      doc.addPage([pw, ph], cw >= ch ? 'landscape' : 'portrait'); doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
+      await saveBlob('teklif-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');
+    } catch (e) {
+      showNotice('Teklif oluşturulamadı: ' + (e && e.message ? e.message : e));
+    } finally {
+      if (res && res.canvas) { res.canvas.width = 0; res.canvas.height = 0; }
+      exporting = false; $('btnExport').disabled = !foundRows().length; syncOffer();
+    }
+  });
   $('btnExport').addEventListener('click', async function(){
     var items = foundRows();
     if (!items.length) { showNotice('Önce parselleri sorgulayın, çıktı bulunan parsellerden alınır.'); return; }

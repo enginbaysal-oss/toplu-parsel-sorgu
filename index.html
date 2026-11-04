@@ -522,7 +522,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 05.11 · teklif</summary>
+        <summary>Ayarlar · sürüm 05.11 · teklif 2</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2407,7 +2407,7 @@ function poleOf(g){
   function offerData(){
     var all = foundRows(), off = all.filter(function(r){ return r.checked; });
     if (!off.length) off = all.slice();
-    var others = all.filter(function(r){ return off.indexOf(r) < 0; });
+    var others = rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; });
     var mode = $('ofType').value, val = parseNum($('ofVal').value) || 0;
     var area = off.reduce(function(a, r){ return a + areaOf(r); }, 0);
     var lines = off.map(function(r){ return {r: r, a: areaOf(r), t: 0}; }), total = 0, unit = 0;

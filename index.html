@@ -361,7 +361,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnArcSave" disabled>Arşive kaydet</button>
       </div>
       <div id="arcList" class="arclist"></div>
-      <p class="hint">Kayıtlar bu cihazda saklanır, dosya aramanıza gerek kalmaz. Açınca mevcut liste yerine gelir.</p>
+      <p class="hint">Kayıtlar bu cihazda saklanır. <b>Paylaş</b> ile WhatsApp, e-posta gibi uygulamalarla gönderebilirsiniz; alan cihazda "Dosyadan yükle → Yedek" ile açılır.</p>
     </section>
 
     <section>
@@ -500,7 +500,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 04.11 · arşiv</summary>
+        <summary>Ayarlar · sürüm 04.11 · arşiv paylaş</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1669,7 +1669,7 @@ function poleOf(g){
     arcAll().then(function(list){
       $('arcList').innerHTML = list.length ? list.map(function(k){
         return '<div class="arc" data-id="' + k.id + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + '</div></div>' +
-          '<button type="button" class="arc-open">Aç</button><button type="button" class="arc-del danger">Sil</button></div>';
+          '<button type="button" class="arc-open">Aç</button><button type="button" class="arc-share">Paylaş</button><button type="button" class="arc-del danger">Sil</button></div>';
       }).join('') : '<div class="hint">Henüz kayıt yok.</div>';
     }).catch(function(e){ $('arcList').innerHTML = '<div class="hint">' + esc(e.message) + '</div>'; });
   }
@@ -1694,6 +1694,12 @@ function poleOf(g){
         if (k.title) { $('outTitle').value = k.title; }
         applyGeoText(k.text, 'arşivden açıldı: ' + k.name);
       }).catch(function(er){ showNotice('Kayıt açılamadı: ' + er.message); });
+    } else if (e.target.classList.contains('arc-share')) {
+      arcTx('readonly', function(st){ return st.get(id); }).then(function(k){
+        if (!k) throw new Error('Kayıt bulunamadı.');
+        var slug = String(k.name).toLowerCase().replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'kayit';
+        return shareBlob('parsel-' + slug + '.json', new Blob([k.text], {type: 'application/json'}), 'application/json', k.name);
+      }).catch(function(er){ showNotice('Paylaşılamadı: ' + (er && er.message ? er.message : er)); });
     } else if (e.target.classList.contains('arc-del')) {
       if (!confirm('Bu arşiv kaydı silinsin mi?')) return;
       arcTx('readwrite', function(st){ return st.delete(id); }).then(arcRender).catch(function(er){ showNotice('Silinemedi: ' + er.message); });
@@ -2255,6 +2261,22 @@ function poleOf(g){
     a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     showNotice('Çıktı hazırlandı: ' + name, true);
+  }
+  async function shareBlob(name, blob, mime, title){
+    var cap = window.Capacitor, P = cap && cap.Plugins, native = cap && cap.isNativePlatform && cap.isNativePlatform() && P;
+    if (native && P.Filesystem && P.Share) {
+      var b64 = await new Promise(function(res, rej){ var fr = new FileReader(); fr.onload = function(){ res(String(fr.result).split(',')[1]); }; fr.onerror = function(){ rej(fr.error); }; fr.readAsDataURL(blob); });
+      var w = await P.Filesystem.writeFile({path: name, data: b64, directory: 'CACHE'});
+      await P.Share.share({title: title || name, text: title || name, url: w.uri, dialogTitle: 'Paylaş'});
+      return true;
+    }
+    try {
+      var file = new File([blob], name, {type: mime});
+      if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: title || name}); return true; }
+    } catch (e) { if (e && e.name === 'AbortError') return true; }
+    await saveBlob(name, blob, mime);
+    showNotice('Bu cihaz doğrudan paylaşmayı desteklemiyor, dosya indirildi: ' + name, true);
+    return false;
   }
   function buildXlsx(title){
     var list = rows.filter(function(r){ return (r.feature && !r.hidden) || (!r.feature && $('outMiss').checked && (r.status === 'yok' || r.status === 'hata')); });

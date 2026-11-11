@@ -522,7 +522,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 05.11 · teklif 3</summary>
+        <summary>Ayarlar · sürüm 11.11 · kalıcı arşiv</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1727,6 +1727,7 @@ function poleOf(g){
       arcTx('readwrite', function(st){ return st.delete(id); }).then(arcRender).catch(function(er){ showNotice('Silinemedi: ' + er.message); });
     }
   });
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   arcRender();
   $('fileImport').addEventListener('change', function(e){ var f = e.target.files[0]; if (f) readGeoFile(f); e.target.value = ''; });
 

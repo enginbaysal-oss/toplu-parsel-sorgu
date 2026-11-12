@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.11 · erişim kodu</summary>
+        <summary>Ayarlar · sürüm 12.12 · erişim kodu</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -829,7 +829,9 @@ function poleOf(g){
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var API_OLD = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
-  var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : 'https://toplu-parsel-sorgu-tdqp-9tdx0xge3-engin16.vercel.app';
+  var API_DEPLOY_OLD = 'https://toplu-parsel-sorgu-tdqp-9tdx0xge3-engin16.vercel.app';
+  var API_CANDS = ['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app', 'https://toplu-parsel-sorgu-tdqp-engin16.vercel.app', 'https://toplu-parsel-sorgu-engin16.vercel.app'];
+  var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : API_CANDS[0];
   var LS = 'parsel-harita-v1';
 
   /* ---------- harita ---------- */
@@ -933,7 +935,25 @@ function poleOf(g){
   var KOD = 'parsel-harita-kod-v1';
   function accessCode(){ try { return localStorage.getItem(KOD) || ''; } catch (e) { return ''; } }
   function withKey(url){ var c = accessCode(); return c ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(c) : url; }
+  var apiProbed = false;
+  async function ensureApi(){
+    if (apiProbed) return; apiProbed = true;
+    var cur = $('apiBase').value.trim().replace(/\/+$/, '');
+    var managed = !cur || cur === API_DEFAULT || cur === API_DEPLOY_OLD || API_CANDS.indexOf(cur) >= 0;
+    if (!managed || /\.vercel\.app$/.test(location.hostname)) return;
+    var list = [cur].concat(API_CANDS).filter(function(u, i, a){ return u && a.indexOf(u) === i && u !== API_DEPLOY_OLD; });
+    for (var i = 0; i < list.length; i++) {
+      var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); }, 7000);
+      try {
+        var r = await fetch(list[i] + '/api/auth?k=probe', {cache: 'no-store', signal: ctrl.signal});
+        var ct = r.headers.get('content-type') || '';
+        if ((r.status === 401 || r.status === 200) && ct.indexOf('json') >= 0) { clearTimeout(t); if (list[i] !== cur) { $('apiBase').value = list[i]; memoCache.clear(); save(); } return; }
+      } catch (e) {}
+      clearTimeout(t);
+    }
+  }
   async function accessCheck(code){
+    await ensureApi();
     var r = await fetch(base() + '/api/auth?k=' + encodeURIComponent(code), {cache: 'no-store'});
     if (r.status === 401) return {ok: false};
     if (r.status === 404) throw new Error('Sunucu henüz güncel değil (erişim servisi bulunamadı). Birkaç dakika sonra deneyin.');
@@ -2776,7 +2796,7 @@ function poleOf(g){
       if (s.hatchStyle) $('hatchStyle').value = s.hatchStyle;
       if (s.hatchColor && s.cv === 2) $('hatchColor').value = s.hatchColor;
       if (s.labels != null) $('showLabels').checked = !!s.labels;
-      if (s.api && s.api !== API_OLD && s.api !== 'https://purple-morning-da64.engin-baysal.workers.dev') $('apiBase').value = s.api;
+      if (s.api && s.api !== API_OLD && s.api !== API_DEPLOY_OLD && s.api !== 'https://purple-morning-da64.engin-baysal.workers.dev') $('apiBase').value = s.api;
       if (s.conc) $('conc').value = s.conc;
       if (s.mb && s.mb.indexOf('pk.') === 0) $('mbToken').value = s.mb;
     } catch (e) {}

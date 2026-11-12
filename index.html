@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.13 · erişim kodu</summary>
+        <summary>Ayarlar · sürüm 12.14 · erişim kodu</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -548,7 +548,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
           </label>
         </div>
         <div class="row" style="margin-top:8px"><button type="button" id="btnTest">Bağlantıyı sına</button></div>
-        <div class="row" style="margin-top:8px;align-items:center"><span class="hint" style="margin:0;flex:1">Oturum: <b id="accInfo">—</b></span><button type="button" id="btnLogout" class="ghost">Çıkış yap</button></div><details class="optdd" id="adm" style="margin-top:8px"><summary>Yönetici · kullanıcı ekle / kaldır</summary>
+        <div class="row" style="margin-top:8px;align-items:center"><span class="hint" style="margin:0;flex:1">Oturum: <b id="accInfo">—</b></span><button type="button" id="btnInstall" class="ghost" hidden>Bilgisayara kur</button> <button type="button" id="btnLogout" class="ghost">Çıkış yap</button></div><details class="optdd" id="adm" style="margin-top:8px"><summary>Yönetici · kullanıcı ekle / kaldır</summary>
           <div class="hint" style="margin:6px 0">İlk kullanımda GitHub erişim anahtarı gerekir (yalnızca bu cihazda saklanır). Değişiklik yaklaşık 1–2 dk içinde geçerli olur.</div>
           <div class="row"><input type="password" id="admTok" placeholder="GitHub anahtarı (github_pat_…)" autocomplete="off" style="flex:1"><button type="button" id="admTokSave" class="ghost">Kaydet</button></div>
           <div id="admList" class="hint" style="margin:8px 0"></div>
@@ -1049,6 +1049,11 @@ function poleOf(g){
       try { cur = await load(); var nm = cur.list[i].name; cur.list.splice(i, 1); await save(cur, cur.list, 'Kullanici kaldirildi: ' + nm); msg(nm + ' kaldırıldı (en geç 1–6 saat içinde, çoğunlukla 1–2 dk).'); cur = await load(); render(cur.list); } catch (er) { msg(er.message, true); }
     });
   })();
+
+  var instEv = null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); instEv = e; $('btnInstall').hidden = false; });
+  window.addEventListener('appinstalled', function(){ instEv = null; $('btnInstall').hidden = true; });
+  $('btnInstall').addEventListener('click', async function(){ if (!instEv) return; instEv.prompt(); try { await instEv.userChoice; } catch (e) {} instEv = null; $('btnInstall').hidden = true; });
   $('btnLogout').addEventListener('click', function(){ try { localStorage.removeItem(KOD); } catch (e) {} location.reload(); });
   (async function(){
     var c = accessCode();

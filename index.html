@@ -936,6 +936,7 @@ function poleOf(g){
   async function accessCheck(code){
     var r = await fetch(base() + '/api/auth?k=' + encodeURIComponent(code), {cache: 'no-store'});
     if (r.status === 401) return {ok: false};
+    if (r.status === 404) throw new Error('Sunucu henüz güncel değil (erişim servisi bulunamadı). Birkaç dakika sonra deneyin.');
     if (!r.ok) throw new Error('Sunucu yanıtı HTTP ' + r.status);
     return await r.json();
   }
@@ -949,7 +950,7 @@ function poleOf(g){
       var j = await accessCheck(code);
       if (j.ok) { try { localStorage.setItem(KOD, code); } catch (e) {} $('lockCode').value = ''; lockHide(); accessInfo(j); }
       else $('lockMsg').textContent = 'Kod geçersiz veya süresi dolmuş.';
-    } catch (e) { $('lockMsg').textContent = 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.'; }
+    } catch (e) { $('lockMsg').textContent = /güncel değil/.test(e.message) ? e.message : 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.'; }
     $('lockBtn').disabled = false;
   });
   function accessInfo(j){ var el = $('accInfo'); if (el) el.textContent = (j && j.name ? j.name : 'Yetkili kullanıcı') + (j && j.until ? ' · ' + j.until + ' tarihine kadar' : ''); }

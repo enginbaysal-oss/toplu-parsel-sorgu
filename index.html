@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.12 · erişim kodu</summary>
+        <summary>Ayarlar · sürüm 12.13 · erişim kodu</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -548,7 +548,16 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
           </label>
         </div>
         <div class="row" style="margin-top:8px"><button type="button" id="btnTest">Bağlantıyı sına</button></div>
-        <div class="row" style="margin-top:8px;align-items:center"><span class="hint" style="margin:0;flex:1">Oturum: <b id="accInfo">—</b></span><button type="button" id="btnLogout" class="ghost">Çıkış yap</button></div><pre id="testOut" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0" hidden></pre>
+        <div class="row" style="margin-top:8px;align-items:center"><span class="hint" style="margin:0;flex:1">Oturum: <b id="accInfo">—</b></span><button type="button" id="btnLogout" class="ghost">Çıkış yap</button></div><details class="optdd" id="adm" style="margin-top:8px"><summary>Yönetici · kullanıcı ekle / kaldır</summary>
+          <div class="hint" style="margin:6px 0">İlk kullanımda GitHub erişim anahtarı gerekir (yalnızca bu cihazda saklanır). Değişiklik yaklaşık 1–2 dk içinde geçerli olur.</div>
+          <div class="row"><input type="password" id="admTok" placeholder="GitHub anahtarı (github_pat_…)" autocomplete="off" style="flex:1"><button type="button" id="admTokSave" class="ghost">Kaydet</button></div>
+          <div id="admList" class="hint" style="margin:8px 0"></div>
+          <div class="row"><input type="text" id="admName" placeholder="Kullanıcı adı" style="flex:1"><input type="date" id="admUntil" title="Bitiş tarihi (boş = süresiz)"></div>
+          <div class="row" style="margin-top:6px"><input type="text" id="admPw" placeholder="Şifre (en az 8 karakter)" autocomplete="off" style="flex:1"><button type="button" id="admGen" class="ghost">Öner</button></div>
+          <div class="row" style="margin-top:6px"><button type="button" id="admAdd" class="primary" style="flex:1">Kullanıcı ekle</button></div>
+          <div id="admMsg" class="hint" style="margin-top:6px"></div>
+        </details>
+        <pre id="testOut" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0" hidden></pre>
         <p class="hint" style="margin-top:8px">Veriler TKGM Parsel Sorgu servisinden gelir. Sınırlar bilgi amaçlıdır, kesin sınır yerine geçmez. Tarayıcı servise erişimi engellerse kendi aracı sunucunuzun adresini buraya yazabilir veya hazır bir GeoJSON dosyasını açabilirsiniz.</p>
       </details>
     </section>
@@ -974,6 +983,72 @@ function poleOf(g){
     $('lockBtn').disabled = false;
   });
   function accessInfo(j){ var el = $('accInfo'); if (el) el.textContent = (j && j.name ? j.name : 'Yetkili kullanıcı') + (j && j.until ? ' · ' + j.until + ' tarihine kadar' : ''); }
+
+  /* ---- Yönetici ekranı: kullanıcıları GitHub üzerinden api/_codes.json'a yazar ---- */
+  (function(){
+    var REPO = 'enginbaysal-oss/toplu-parsel-sorgu', PATH = 'api/_codes.json', TK = 'parsel-harita-gh-v1';
+    var W = ['Kuzey','Güney','Deniz','Dağ','Orman','Bulut','Yıldız','Nehir','Zeytin','Kartal','Çınar','Rüzgar','Ay','Güneş','Vadi','Ova','Köprü','Fener','Çayır','Pınar','Kaya','Göl','Bahar','Kıyı'];
+    function tok(){ try { return localStorage.getItem(TK) || ''; } catch (e) { return ''; } }
+    function msg(t, bad){ var m = $('admMsg'); m.textContent = t; m.style.color = bad ? '#b3261e' : ''; }
+    function hex(b){ return Array.prototype.map.call(new Uint8Array(b), function(x){ return ('0' + x.toString(16)).slice(-2); }).join(''); }
+    function b64d(t){ return decodeURIComponent(escape(atob(t.replace(/\s/g, '')))); }
+    function b64e(t){ return btoa(unescape(encodeURIComponent(t))); }
+    async function gh(method, body){
+      var r = await fetch('https://api.github.com/repos/' + REPO + '/contents/' + PATH + (method === 'GET' ? '?ref=main&t=' + Date.now() : ''), {
+        method: method, headers: {'Authorization': 'Bearer ' + tok(), 'Accept': 'application/vnd.github+json'}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store'});
+      if (r.status === 401 || r.status === 403 || r.status === 404) throw new Error('Anahtar geçersiz ya da yetkisiz (HTTP ' + r.status + ').');
+      if (!r.ok) throw new Error('GitHub yanıtı HTTP ' + r.status);
+      return r.json();
+    }
+    async function load(){
+      var j = await gh('GET'); return {sha: j.sha, list: JSON.parse(b64d(j.content))};
+    }
+    async function save(cur, list, note){
+      await gh('PUT', {message: note, content: b64e(JSON.stringify(list, null, 2) + '\n'), sha: cur.sha, branch: 'main'});
+    }
+    async function hashPw(pw){
+      var n = pw.trim().replace(/\s+/g, ' ').toUpperCase(), salt = crypto.getRandomValues(new Uint8Array(16));
+      var key = await crypto.subtle.importKey('raw', new TextEncoder().encode(n), 'PBKDF2', false, ['deriveBits']);
+      var bits = await crypto.subtle.deriveBits({name: 'PBKDF2', hash: 'SHA-256', salt: salt, iterations: 200000}, key, 256);
+      return {s: hex(salt), p: hex(bits), k: 'pb'};
+    }
+    function esc(t){ return String(t).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function render(list){
+      var h = list.map(function(x, i){ return '<div class="row" style="align-items:center;margin:2px 0"><span style="flex:1">' + esc(x.name) + (x.until ? ' · ' + esc(x.until) + ' tarihine kadar' : '') + '</span><button type="button" class="ghost admDel" data-i="' + i + '">Kaldır</button></div>'; }).join('');
+      $('admList').innerHTML = h || 'Kayıtlı kullanıcı yok.';
+    }
+    var cur = null;
+    async function refresh(){
+      if (!tok()) { $('admList').textContent = 'Önce GitHub anahtarını kaydedin.'; return; }
+      try { cur = await load(); render(cur.list); msg(''); } catch (e) { msg(e.message, true); }
+    }
+    $('adm').addEventListener('toggle', function(){ if ($('adm').open) refresh(); });
+    $('admTokSave').addEventListener('click', function(){ var v = $('admTok').value.trim(); if (!v) return; try { localStorage.setItem(TK, v); } catch (e) {} $('admTok').value = ''; msg('Anahtar kaydedildi.'); refresh(); });
+    $('admGen').addEventListener('click', function(){
+      var a = crypto.getRandomValues(new Uint32Array(4)); $('admPw').value = W[a[0] % W.length] + ' ' + W[a[1] % W.length] + ' ' + W[a[2] % W.length] + ' ' + (1000 + a[3] % 9000);
+    });
+    $('admAdd').addEventListener('click', async function(){
+      var name = $('admName').value.trim(), pw = $('admPw').value, until = $('admUntil').value;
+      if (!name) return msg('Kullanıcı adı yazın.', true);
+      if (pw.trim().length < 8) return msg('Şifre en az 8 karakter olmalı.', true);
+      if (!tok()) return msg('Önce GitHub anahtarını kaydedin.', true);
+      $('admAdd').disabled = true; msg('Ekleniyor…');
+      try {
+        cur = await load();
+        var e = await hashPw(pw); e.name = name; if (until) e.until = until;
+        cur.list.push(e); await save(cur, cur.list, 'Kullanici eklendi: ' + name);
+        msg('Eklendi. 1–2 dk içinde geçerli olur. Şifre: ' + pw.trim() + '  (bunu not alıp kişiye iletin)'); $('admName').value = ''; $('admPw').value = ''; $('admUntil').value = ''; cur = await load(); render(cur.list);
+      } catch (er) { msg(er.message, true); }
+      $('admAdd').disabled = false;
+    });
+    $('admList').addEventListener('click', async function(ev){
+      var b = ev.target.closest('.admDel'); if (!b) return; var i = +b.dataset.i;
+      if (!cur || !cur.list[i]) return;
+      if (cur.list.length < 2) return msg('Son kullanıcı kaldırılamaz.', true);
+      if (!confirm(cur.list[i].name + ' kaldırılsın mı?')) return;
+      try { cur = await load(); var nm = cur.list[i].name; cur.list.splice(i, 1); await save(cur, cur.list, 'Kullanici kaldirildi: ' + nm); msg(nm + ' kaldırıldı (en geç 1–6 saat içinde, çoğunlukla 1–2 dk).'); cur = await load(); render(cur.list); } catch (er) { msg(er.message, true); }
+    });
+  })();
   $('btnLogout').addEventListener('click', function(){ try { localStorage.removeItem(KOD); } catch (e) {} location.reload(); });
   (async function(){
     var c = accessCode();

@@ -1,6 +1,6 @@
 // Erişim doğrulaması: api/_codes.json içinde yalnızca özetler tutulur.
 //  - Eski tür: 16 karakterlik kod, SHA-256 (alan: h)
-//  - Şifre/rumuz: scrypt + tuz (alanlar: s = tuz, p = özet)
+//  - Şifre/rumuz: scrypt (k yok) veya PBKDF2 (k:'pb', yönetici ekranı) + tuz (s = tuz, p = özet)
 const crypto = require('crypto');
 const codes = require('./_codes.json');
 const norm = s => String(s).trim().replace(/\s+/g, ' ').toUpperCase();
@@ -17,7 +17,8 @@ module.exports = function check(code) {
   }
   for (const x of codes) {
     if (!x.s) continue;
-    const d = crypto.scryptSync(n, Buffer.from(x.s, 'hex'), 32, {N: 16384}).toString('hex');
+    const salt = Buffer.from(x.s, 'hex');
+    const d = (x.k === 'pb' ? crypto.pbkdf2Sync(n, salt, 200000, 32, 'sha256') : crypto.scryptSync(n, salt, 32, {N: 16384})).toString('hex');
     if (d === x.p) return ok(x);
   }
   return null;

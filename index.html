@@ -293,6 +293,14 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   .arc button{padding:6px 10px;min-height:0;font-size:12.5px;box-shadow:inset 0 1px 0 var(--btn-hi),0 2px 0 var(--btn-edge)}
   .brandf{display:flex;flex-direction:column;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
   .optdd .check{padding:6px 10px;border-top:1px solid var(--line)}
+  #lock{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--zone)}
+  #lock[hidden]{display:none!important}
+  #lockForm{width:min(380px,100%);display:flex;flex-direction:column;gap:12px;padding:26px 22px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 8px 30px rgba(20,35,58,.2);text-align:center}
+  #lockForm h1{margin:0;font-size:22px}
+  #lockForm p{margin:0;color:var(--muted);font-size:14px}
+  .lockmark{font-size:34px;color:var(--accent);line-height:1}
+  #lockCode{text-align:center;letter-spacing:.12em;font-size:16px;padding:11px}
+  #lockMsg{min-height:1.2em;font-size:13px;color:var(--crit)}
   input.usernote{width:150px;max-width:100%;padding:3px 5px;font:inherit;font-size:13px;box-sizing:border-box}
   .mu{font-size:12px;color:#586a72}
   .cmode{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:14px}
@@ -301,6 +309,16 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 </style>
 </head>
 <body>
+<div id="lock" role="dialog" aria-modal="true" aria-labelledby="lockT">
+  <form id="lockForm" autocomplete="off">
+    <div class="lockmark">▦</div>
+    <h1 id="lockT">Parsel Haritası</h1>
+    <p>Bu uygulama yetkili kullanıcılara özeldir. Size verilen erişim kodunu girin.</p>
+    <input type="password" id="lockCode" placeholder="Erişim kodu" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Erişim kodu">
+    <button class="primary" type="submit" id="lockBtn">Giriş</button>
+    <div id="lockMsg" role="alert"></div>
+  </form>
+</div>
 <div class="app">
   <aside class="panel">
     <header class="top">
@@ -522,14 +540,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 11.11 · kalıcı arşiv</summary>
+        <summary>Ayarlar · sürüm 12.11 · erişim kodu</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
             <select id="conc"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>
           </label>
         </div>
-        <div class="row" style="margin-top:8px"><button type="button" id="btnTest">Bağlantıyı sına</button></div><pre id="testOut" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0" hidden></pre>
+        <div class="row" style="margin-top:8px"><button type="button" id="btnTest">Bağlantıyı sına</button></div>
+        <div class="row" style="margin-top:8px;align-items:center"><span class="hint" style="margin:0;flex:1">Oturum: <b id="accInfo">—</b></span><button type="button" id="btnLogout" class="ghost">Çıkış yap</button></div><pre id="testOut" class="hint" style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0" hidden></pre>
         <p class="hint" style="margin-top:8px">Veriler TKGM Parsel Sorgu servisinden gelir. Sınırlar bilgi amaçlıdır, kesin sınır yerine geçmez. Tarayıcı servise erişimi engellerse kendi aracı sunucunuzun adresini buraya yazabilir veya hazır bir GeoJSON dosyasını açabilirsiniz.</p>
       </details>
     </section>
@@ -911,6 +930,36 @@ function poleOf(g){
     if (!memoCache.has(k)) { var p = fn(); memoCache.set(k, p); p.catch(function(){ memoCache.delete(k); }); }
     return memoCache.get(k);
   }
+  var KOD = 'parsel-harita-kod-v1';
+  function accessCode(){ try { return localStorage.getItem(KOD) || ''; } catch (e) { return ''; } }
+  function withKey(url){ var c = accessCode(); return c ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(c) : url; }
+  async function accessCheck(code){
+    var r = await fetch(base() + '/api/auth?k=' + encodeURIComponent(code), {cache: 'no-store'});
+    if (r.status === 401) return {ok: false};
+    if (!r.ok) throw new Error('Sunucu yanıtı HTTP ' + r.status);
+    return await r.json();
+  }
+  function lockShow(msg){ $('lock').hidden = false; $('lockMsg').textContent = msg || ''; setTimeout(function(){ try { $('lockCode').focus(); } catch (e) {} }, 50); }
+  function lockHide(){ $('lock').hidden = true; }
+  $('lockForm').addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var code = $('lockCode').value.trim().toUpperCase(); if (!code) return;
+    $('lockBtn').disabled = true; $('lockMsg').textContent = 'Kontrol ediliyor…';
+    try {
+      var j = await accessCheck(code);
+      if (j.ok) { try { localStorage.setItem(KOD, code); } catch (e) {} $('lockCode').value = ''; lockHide(); accessInfo(j); }
+      else $('lockMsg').textContent = 'Kod geçersiz veya süresi dolmuş.';
+    } catch (e) { $('lockMsg').textContent = 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.'; }
+    $('lockBtn').disabled = false;
+  });
+  function accessInfo(j){ var el = $('accInfo'); if (el) el.textContent = (j && j.name ? j.name : 'Yetkili kullanıcı') + (j && j.until ? ' · ' + j.until + ' tarihine kadar' : ''); }
+  $('btnLogout').addEventListener('click', function(){ try { localStorage.removeItem(KOD); } catch (e) {} location.reload(); });
+  (async function(){
+    var c = accessCode();
+    if (!c) { lockShow(''); return; }
+    try { var j = await accessCheck(c); if (j.ok) { lockHide(); accessInfo(j); } else { try { localStorage.removeItem(KOD); } catch (e) {} lockShow('Erişiminiz sona ermiş veya kaldırılmış. Yeni kodu girin.'); } }
+    catch (e) { lockHide(); }
+  })();
   function base(){ return ($('apiBase').value.trim() || API_DEFAULT).replace(/\/+$/, ''); }
 
   function showNotice(msg, ok){ var n = $('notice'); n.textContent = msg || ''; n.hidden = !msg; n.classList.toggle('ok', !!ok); }
@@ -922,7 +971,8 @@ function poleOf(g){
     var ctrl = new AbortController();
     var t = setTimeout(function(){ ctrl.abort(); }, 25000);
     try {
-      var res = await fetch(url, {headers: {Accept: 'application/json'}, signal: ctrl.signal});
+      var res = await fetch(withKey(url), {headers: {Accept: 'application/json'}, signal: ctrl.signal});
+      if (res.status === 401) { try { localStorage.removeItem(KOD); } catch (e0) {} lockShow('Erişim kodu geçersiz veya süresi dolmuş. Yeni kodu girin.'); var ue = new Error('Yetkisiz: erişim kodu gerekli'); ue.status = 401; throw ue; }
       if (res.status === 404) { var nf = new Error('Parsel bulunamadı'); nf.notFound = true; throw nf; }
       if (!res.ok) {
         var he = new Error('Sunucu yanıtı HTTP ' + res.status + ' · ' + url);
@@ -2742,7 +2792,7 @@ function poleOf(g){
     out.textContent = 'Deneniyor: ' + url;
     var r = '';
     try {
-      var res = await fetch(url, {cache: 'no-store'});
+      var res = await fetch(withKey(url), {cache: 'no-store'});
       var txt = await res.text();
       r = 'HTTP ' + res.status + ' · ' + (res.headers.get('content-type') || '?') + '\n' + txt.slice(0, 160);
     } catch (e) {

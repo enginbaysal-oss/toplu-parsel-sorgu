@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.14 · erişim kodu</summary>
+        <summary>Ayarlar · sürüm 12.15</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -942,6 +942,7 @@ function poleOf(g){
     return memoCache.get(k);
   }
   var KOD = 'parsel-harita-kod-v1';
+  var ACCESS_REQUIRED = false; /* erişim kodu şu an kapalı; açmak için true yapın (api/tkgm.js'de REQUIRE_KEY de) */
   function accessCode(){ try { return localStorage.getItem(KOD) || ''; } catch (e) { return ''; } }
   function withKey(url){ var c = accessCode(); return c ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(c) : url; }
   var apiProbed = false;
@@ -1056,6 +1057,7 @@ function poleOf(g){
   $('btnInstall').addEventListener('click', async function(){ if (!instEv) return; instEv.prompt(); try { await instEv.userChoice; } catch (e) {} instEv = null; $('btnInstall').hidden = true; });
   $('btnLogout').addEventListener('click', function(){ try { localStorage.removeItem(KOD); } catch (e) {} location.reload(); });
   (async function(){
+    if (!ACCESS_REQUIRED) { lockHide(); return; }
     var c = accessCode();
     if (!c) { lockShow(''); return; }
     try { var j = await accessCheck(c); if (j.ok) { lockHide(); accessInfo(j); } else { try { localStorage.removeItem(KOD); } catch (e) {} lockShow('Erişiminiz sona ermiş veya kaldırılmış. Yeni kodu girin.'); } }
@@ -1073,7 +1075,7 @@ function poleOf(g){
     var t = setTimeout(function(){ ctrl.abort(); }, 25000);
     try {
       var res = await fetch(withKey(url), {headers: {Accept: 'application/json'}, signal: ctrl.signal});
-      if (res.status === 401) { try { localStorage.removeItem(KOD); } catch (e0) {} lockShow('Erişim kodu geçersiz veya süresi dolmuş. Yeni kodu girin.'); var ue = new Error('Yetkisiz: erişim kodu gerekli'); ue.status = 401; throw ue; }
+      if (res.status === 401 && ACCESS_REQUIRED) { try { localStorage.removeItem(KOD); } catch (e0) {} lockShow('Erişim kodu geçersiz veya süresi dolmuş. Yeni kodu girin.'); var ue = new Error('Yetkisiz: erişim kodu gerekli'); ue.status = 401; throw ue; }
       if (res.status === 404) { var nf = new Error('Parsel bulunamadı'); nf.notFound = true; throw nf; }
       if (!res.ok) {
         var he = new Error('Sunucu yanıtı HTTP ' + res.status + ' · ' + url);

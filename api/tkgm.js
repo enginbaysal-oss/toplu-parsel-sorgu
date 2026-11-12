@@ -6,7 +6,9 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
-  if (req.method !== 'OPTIONS' && !check(req.query && req.query.k)) {
+  // Erişim kodu zorunluluğu şu an KAPALI. Açmak için REQUIRE_KEY = true yapın.
+  const REQUIRE_KEY = false;
+  if (REQUIRE_KEY && req.method !== 'OPTIONS' && !check(req.query && req.query.k)) {
     res.statusCode = 401; res.setHeader('Cache-Control', 'no-store'); res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     return res.end('Yetkisiz: gecerli erisim kodu gerekli');
   }

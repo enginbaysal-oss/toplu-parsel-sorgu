@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.15</summary>
+        <summary>Ayarlar · sürüm 12.16 · erişim kodu</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -942,7 +942,7 @@ function poleOf(g){
     return memoCache.get(k);
   }
   var KOD = 'parsel-harita-kod-v1';
-  var ACCESS_REQUIRED = false; /* erişim kodu şu an kapalı; açmak için true yapın (api/tkgm.js'de REQUIRE_KEY de) */
+  var ACCESS_REQUIRED = true; /* erişim kodu zorunlu; kapatmak için false (api/tkgm.js REQUIRE_KEY de) */
   function accessCode(){ try { return localStorage.getItem(KOD) || ''; } catch (e) { return ''; } }
   function withKey(url){ var c = accessCode(); return c ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(c) : url; }
   var apiProbed = false;

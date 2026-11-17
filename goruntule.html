@@ -109,6 +109,8 @@ document.getElementById('loc').addEventListener('click', function(){
 }
 (async function(){
   try {
+    var bm = /^#b=([A-Za-z0-9-]+)$/.exec(location.hash);
+    if (bm) { var rr = await fetch('https://jsonblob.com/api/jsonBlob/' + bm[1], {headers: {'Accept': 'application/json'}}); if (!rr.ok) throw 0; D = await rr.json(); main(); return; }
     var h = location.hash.replace(/^#g=/, ''); if (!h) throw 0;
     var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);

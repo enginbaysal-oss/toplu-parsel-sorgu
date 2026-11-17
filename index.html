@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.21</summary>
+        <summary>Ayarlar · sürüm 12.22</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1905,9 +1905,21 @@ function poleOf(g){
     var bin = ''; for (var i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
     return VIEW_URL + '#g=' + k + btoa(bin).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
   }
+  var BLOB = 'https://jsonblob.com/api/jsonBlob';
+  async function shortLink(){
+    var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); }, 15000);
+    try {
+      var r = await fetch(BLOB, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify(viewerData(5)), signal: ctrl.signal});
+      var loc = r.headers.get('Location') || '', id = loc.split('/').pop();
+      if (!r.ok || !/^[A-Za-z0-9-]{8,}$/.test(id)) throw new Error('kısa link alınamadı');
+      return VIEW_URL + '#b=' + id;
+    } finally { clearTimeout(t); }
+  }
   $('btnLink').addEventListener('click', async function(){
     try {
-      var url = await viewerLink();
+      var url, short = true;
+      try { url = await shortLink(); } catch (e0) { short = false; url = await viewerLink(); }
+      if (!short) showNotice('Kısa link oluşturulamadı (internet?). Uzun link hazırlandı; WhatsApp tıklanabilir yapmayabilir.', true);
       if (url.length > 60000) { showNotice('Çok fazla parsel var, link çok uzun oldu. "Dosya (.html)" seçeneğini kullanın (yalnızca bilgisayarda açılır).', true); return; }
       var P = window.Capacitor && window.Capacitor.Plugins;
       if (P && P.Share) { await P.Share.share({title: 'Parsel haritası', url: url, dialogTitle: 'Müşteriye gönder'}); return; }

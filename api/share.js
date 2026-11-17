@@ -13,6 +13,21 @@ function send(res, code, data) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(data));
 }
+// JavaScript transport for public links viewed on other domains (e.g. GitHub Pages).
+// A script element can load cross-origin without requiring the browser's fetch/CORS API.
+function sendScript(res, payload) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  const safe = JSON.stringify(payload).replace(/</g, '\\u003c')
+    .replace(/\\u2028/g, '\\u2028').replace(/\\u2029/g, '\\u2029');
+  res.end('if(window.__parselShareReceive){window.__parselShareReceive(' + safe + ');}');
+}
+function deliver(res, code, data, asScript) {
+  if (asScript && code === 200) return sendScript(res, data);
+  // Never expose an HTML or JSON error as a JavaScript success.
+  return send(res, code, data);
+}
 function getId(r, body) {
   let loc = r.headers.get('location') || '';
   let id = loc.match(/\/([A-Za-z0-9-]{8,100})\/?(?:\?.*)?$/)?.[1] || '';
@@ -86,6 +101,7 @@ module.exports = async function(req, res) {
       return send(res, 502, {error: 'Kayıt servisleri yanıt vermedi (' + errors.join('; ').slice(0, 180) + '). Lütfen yeniden deneyin.'});
     }
     const raw = String(req.query && req.query.id || '');
+    const asScript = String(req.query && req.query.transport || '') === 'script';
     const prefix = /^([sj])-/.exec(raw);
     const id = prefix ? raw.slice(2) : raw;
     if (!VALID_ID.test(id)) return send(res, 400, {error: 'Geçersiz paylaşım kodu'});
@@ -95,7 +111,7 @@ module.exports = async function(req, res) {
     for (const store of stores) {
       try {
         const result = await readFromStore(store, id);
-        if (result.data) return send(res, 200, result.data);
+        if (result.data) return deliver(res, 200, result.data, asScript);
       } catch (error) { lastError = error; }
     }
     return send(res, lastError ? 502 : 404, {

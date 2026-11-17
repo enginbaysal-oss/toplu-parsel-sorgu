@@ -1937,35 +1937,50 @@ function poleOf(g){
     var tpl = $('viewerTpl').textContent.replace(/<\\\/script>/g, '<' + '/script>');
     return tpl.replace('/*DATA*/null', function(){ return json; }).replace('/*BOOT*/', 'main();');
   }
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html';
-  async function viewerLink(){
-    var u8 = new TextEncoder().encode(JSON.stringify(viewerData(5))), k = 'p';
-    if (window.CompressionStream) { u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); k = 'z'; }
-    var bin = ''; for (var i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-    return VIEW_URL + '#g=' + k + btoa(bin).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
-  }
-  var BLOB = 'https://jsonblob.com/api/jsonBlob';
+  // The public viewer and its API must use one origin for iPhone Safari.
+  var VIEW_ORIGIN = 'https://toplu-parsel-sorgu-tdqp.vercel.app';
+  var VIEW_URL = VIEW_ORIGIN + '/goruntule.html';
   async function shortLink(){
-    var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); }, 15000);
+    var data = viewerData(5);
+    if (!data.items.length) throw new Error('Paylaşılacak bulunmuş parsel yok. Önce haritada parseli görüntüleyin.');
+    var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); }, 20000);
     try {
-      var r = await fetch(BLOB, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify(viewerData(5)), signal: ctrl.signal});
-      var loc = r.headers.get('Location') || '', id = loc.split('/').pop();
-      if (!r.ok || !/^[A-Za-z0-9-]{8,}$/.test(id)) throw new Error('kısa link alınamadı');
-      return VIEW_URL + '#b=' + id;
+      var r = await fetch(VIEW_ORIGIN + '/api/share', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify(data), signal: ctrl.signal
+      });
+      var result = await r.json().catch(function(){ return {}; });
+      if (!r.ok) throw new Error(result.error || ('Paylaşım sunucusu HTTP ' + r.status));
+      if (!result.id || !/^[A-Za-z0-9-]{8,100}$/.test(result.id)) throw new Error('Geçerli link alınamadı');
+      return VIEW_URL + '?id=' + encodeURIComponent(result.id);
     } finally { clearTimeout(t); }
   }
+  function showSharePreview(url){
+    showNotice('Müşteri bağlantısı hazır. Göndermeden önce buradan açıp kontrol edebilirsiniz.', true);
+    var notice = $('notice'), a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = 'Haritayı önizle';
+    a.style.cssText = 'display:inline-block;margin-top:8px;padding:8px 10px;background:var(--panel);color:var(--accent);border-radius:8px;font-weight:700;text-decoration:underline';
+    notice.appendChild(document.createElement('br')); notice.appendChild(a);
+  }
   $('btnLink').addEventListener('click', async function(){
+    if (this.disabled) return;
+    this.disabled = true;
     try {
-      var url, short = true;
-      try { url = await shortLink(); } catch (e0) { short = false; url = await viewerLink(); }
-      if (!short) showNotice('Kısa link oluşturulamadı (internet?). Uzun link hazırlandı; WhatsApp tıklanabilir yapmayabilir.', true);
-      if (url.length > 60000) { showNotice('Çok fazla parsel var, link çok uzun oldu. "Dosya (.html)" seçeneğini kullanın (yalnızca bilgisayarda açılır).', true); return; }
+      showNotice('Müşteri bağlantısı hazırlanıyor…', true);
+      var url = await shortLink();
+      showSharePreview(url);
       var P = window.Capacitor && window.Capacitor.Plugins;
       if (P && P.Share) { await P.Share.share({title: 'Parsel haritası', url: url, dialogTitle: 'Müşteriye gönder'}); return; }
-      if (navigator.share) { try { await navigator.share({title: 'Parsel haritası', url: url}); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
-      try { await navigator.clipboard.writeText(url); showNotice('Link kopyalandı. WhatsApp ya da e-postaya yapıştırıp gönderin.', true); }
+      if (navigator.share) {
+        try { await navigator.share({title: 'Parsel haritası', url: url}); return; }
+        catch (e) { if (e && e.name === 'AbortError') return; }
+      }
+      try { await navigator.clipboard.writeText(url); showSharePreview(url); }
       catch (e) { window.prompt('Linki kopyalayın:', url); }
-    } catch (e) { showNotice('Link hazırlanamadı: ' + e.message, true); }
+    } catch (e) {
+      showNotice('Müşteri linki oluşturulamadı: ' + e.message + '. Hatalı/çok uzun bağlantı WhatsApp’a gönderilmedi.');
+    } finally { this.disabled = false; }
   });
   $('btnView').addEventListener('click', function(){
     var d = new Date(), z = function(n){ return String(n).padStart(2, '0'); };

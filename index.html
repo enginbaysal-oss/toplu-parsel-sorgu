@@ -1962,8 +1962,9 @@ function poleOf(g){
   }
   // The public viewer and its API must use one origin for iPhone Safari.
   var VIEW_ORIGIN = 'https://toplu-parsel-sorgu-tdqp.vercel.app';
-  // Public static viewer: no Vercel account/session required on Android or WhatsApp.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261117b';
+  // Keep the customer viewer and its share API on one origin.
+  // GitHub Pages could load the HTML on Android but cross-origin parcel data was blocked.
+  var VIEW_URL = VIEW_ORIGIN + '/goruntule.html?v=20261117c';
   async function shortLink(){
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak bulunmuş parsel yok. Önce haritada parseli görüntüleyin.');

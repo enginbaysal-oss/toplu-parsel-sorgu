@@ -41,6 +41,16 @@ function statusMessage(t, error){
   if (!s) return;
   s.textContent = t; s.hidden = false; s.className = error ? 'error' : '';
 }
+function ensureLeaflet(){
+  if (window.L) return Promise.resolve();
+  return new Promise(function(resolve, reject){
+    var script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = function(){ window.L ? resolve() : reject(new Error('Harita kütüphanesi kullanılamıyor')); };
+    script.onerror = function(){ reject(new Error('Harita kütüphanesi mobil tarayıcıda yüklenemedi')); };
+    document.head.appendChild(script);
+  });
+}
 function failScreen(e){
   var msg = e && e.message ? e.message : 'Bilinmeyen hata';
   statusMessage('Harita açılamadı: ' + msg, true);
@@ -146,7 +156,7 @@ document.getElementById('loc').addEventListener('click', function(){
 async function sharedData(id){
   var hosts = [];
   // On GitHub Pages, the viewer is public and the data service lives at Vercel.
-  if (!/github\\.io$/i.test(location.hostname)) hosts.push(location.origin);
+  if (!/github\.io$/i.test(location.hostname)) hosts.push(location.origin);
   hosts.push('https://toplu-parsel-sorgu-tdqp.vercel.app');
   hosts.push('https://toplu-parsel-sorgu.vercel.app');
   var urls = [];
@@ -187,12 +197,14 @@ async function sharedData(id){
       var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       if (k === 'z') {
-        if (!window.DecompressionStream) throw new Error('Bu Safari sürümü sıkıştırılmış linkleri desteklemiyor');
+        if (!window.DecompressionStream) throw new Error('Bu tarayıcı sürümü sıkıştırılmış eski linkleri desteklemiyor');
         u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
       }
       D = JSON.parse(new TextDecoder().decode(u));
     }
     if (!D || !Array.isArray(D.items)) throw new Error('Parsel verisi geçersiz');
+    statusMessage('Harita kütüphanesi yükleniyor…');
+    await ensureLeaflet();
     main();
   } catch (e) { failScreen(e); }
 })();

@@ -245,9 +245,14 @@ async function sharedData(id){
       var h = location.hash.replace(/^#g=/, ''); if (!h) throw new Error('Bağlantı verisi eksik');
       var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      if (k === 'z') {
-        if (!window.DecompressionStream) throw new Error('Bu tarayıcı sürümü sıkıştırılmış eski linkleri desteklemiyor');
-        u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      if (k === 'z' || k === 'q') {
+        if (!window.DecompressionStream) throw new Error('Tarayıcı sıkıştırılmış harita linklerini desteklemiyor. Android Chrome veya güncel Safari kullanın.');
+        var fmt = k === 'q' ? 'gzip' : 'deflate-raw';
+        try {
+          u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream(fmt))).arrayBuffer());
+        } catch (de) { throw new Error('Harita bağlantısı eksik veya bozulmuş olabilir. Tam linki yeniden gönderin.'); }
+      } else if (k !== 'p') {
+        throw new Error('Paylaşım bağlantısı biçimi tanınmadı');
       }
       D = JSON.parse(new TextDecoder().decode(u));
     }

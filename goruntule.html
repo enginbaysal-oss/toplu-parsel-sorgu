@@ -153,37 +153,74 @@ document.getElementById('loc').addEventListener('click', function(){
 });
 
 }
-async function sharedData(id){
-  var hosts = [];
-  // On GitHub Pages, the viewer is public and the data service lives at Vercel.
-  if (!/github\.io$/i.test(location.hostname)) hosts.push(location.origin);
-  hosts.push('https://toplu-parsel-sorgu-tdqp.vercel.app');
-  hosts.push('https://toplu-parsel-sorgu.vercel.app');
-  var urls = [];
-  hosts.forEach(function(host){
-    var u = host + '/api/share?id=' + encodeURIComponent(id);
-    if (urls.indexOf(u) < 0) urls.push(u);
+function validSharedData(data){
+  return data && Array.isArray(data.items) && data.items.length > 0;
+}
+function fetchSharedData(url, ms){
+  return new Promise(function(resolve, reject){
+    var timer = null, ctrl = new AbortController();
+    timer = setTimeout(function(){ ctrl.abort(); }, ms || 8000);
+    fetch(url, {headers: {'Accept': 'application/json'}, cache: 'no-store', signal: ctrl.signal})
+      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data){ if (!validSharedData(data)) throw new Error('Parsel verisi eksik'); resolve(data); })
+      .catch(reject)
+      .finally(function(){ clearTimeout(timer); });
   });
-  // Fallback for Android browsers if one of the deployment domains is blocked.
-  var prefix = /^([sj])-/.exec(id), cleanId = prefix ? id.slice(2) : id;
-  if (!prefix || prefix[1] === 's') urls.push('https://superjsonblob.com/api/jsonBlob/' + encodeURIComponent(cleanId));
-  if (!prefix || prefix[1] === 'j') urls.push('https://jsonblob.com/api/jsonBlob/' + encodeURIComponent(cleanId));
-  var lastError = new Error('Paylaşım verisine erişilemiyor');
-  for (var n = 0; n < urls.length; n++) {
-    statusMessage('Parsel verileri yükleniyor (' + (n + 1) + '/' + urls.length + ')…');
-    try {
-      var ctrl = new AbortController();
-      var timer = setTimeout(function(){ ctrl.abort(); }, 9000);
-      var response;
-      try { response = await fetch(urls[n], {headers: {'Accept': 'application/json'}, cache: 'no-store', signal: ctrl.signal}); }
-      finally { clearTimeout(timer); }
-      if (!response.ok) throw new Error('Veri sunucusu HTTP ' + response.status);
-      var data = await response.json();
-      if (!data || !Array.isArray(data.items) || !data.items.length) throw new Error('Parsel verisi eksik');
-      return data;
-    } catch (e) { lastError = e; }
+}
+function scriptSharedData(id, hosts){
+  // GitHub Pages and the API have different origins. A script tag avoids
+  // Android Chrome/WhatsApp CORS restrictions without copying credentials.
+  return new Promise(function(resolve, reject){
+    var done = false, remaining = hosts.length, errors = [], scripts = [];
+    var timer = setTimeout(function(){ finish(new Error('Parsel paylaşım sunucuları zaman aşımına uğradı')); }, 16000);
+    function finish(err, data){
+      if (done) return;
+      done = true; clearTimeout(timer);
+      scripts.forEach(function(t){ if (t.parentNode) t.parentNode.removeChild(t); });
+      try { delete window.__parselShareReceive; } catch(x){ window.__parselShareReceive = null; }
+      if (err) reject(err); else resolve(data);
+    }
+    function failed(host){
+      errors.push(host + ' yanıt vermedi');
+      remaining--;
+      if (!remaining) finish(new Error('Parsel verileri sunucudan alınamadı: ' + errors.join('; ')));
+    }
+    window.__parselShareReceive = function(data){
+      if (validSharedData(data)) finish(null, data);
+      else finish(new Error('Gelen parsel paylaşımı boş veya hatalı'));
+    };
+    hosts.forEach(function(host){
+      var tag = document.createElement('script');
+      tag.async = true;
+      tag.src = host + '/api/share?transport=script&id=' + encodeURIComponent(id);
+      tag.onerror = function(){ if (!done) failed(host); };
+      tag.onload = function(){ if (!done) failed(host); };
+      scripts.push(tag);
+      document.head.appendChild(tag);
+    });
+  });
+}
+async function sharedData(id){
+  var hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app'];
+  if (!/github\\.io$/i.test(location.hostname)) {
+    statusMessage('Parsel verileri yükleniyor…');
+    try { return await fetchSharedData(location.origin + '/api/share?id=' + encodeURIComponent(id), 10000); }
+    catch (e) { /* Try cross-origin transport below. */ }
   }
-  throw new Error('Paylaşım verisi alınamadı (' + lastError.message + ').');
+  statusMessage('Parsel verileri mobil uyumlu bağlantıyla yükleniyor…');
+  try { return await scriptSharedData(id, hosts); }
+  catch (scriptError) {
+    // Older browsers may permit CORS requests while blocking dynamic scripts.
+    var prefix = /^([sj])-/.exec(id), raw = prefix ? id.slice(2) : id;
+    var urls = hosts.map(function(h){ return h + '/api/share?id=' + encodeURIComponent(id); });
+    if (!prefix || prefix[1] === 's') urls.push('https://superjsonblob.com/api/jsonBlob/' + encodeURIComponent(raw));
+    if (!prefix || prefix[1] === 'j') urls.push('https://jsonblob.com/api/jsonBlob/' + encodeURIComponent(raw));
+    statusMessage('Alternatif bağlantı deneniyor…');
+    var results = await Promise.all(urls.map(function(url){ return fetchSharedData(url, 6500).catch(function(){ return null; }); }));
+    var found = results.filter(validSharedData)[0];
+    if (found) return found;
+    throw new Error('Veri sunucularına erişilemiyor. ' + scriptError.message + '. Lütfen ağ bağlantınızı kontrol edin.');
+  }
 }
 (async function(){
   try {

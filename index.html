@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.22</summary>
+        <summary>Ayarlar · sürüm 12.23</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1057,9 +1057,9 @@ function poleOf(g){
   var ACCESS_REQUIRED = false; /* erişim kodu şu an kapalı; açmak için true yapın (api/tkgm.js REQUIRE_KEY de) */
   function accessCode(){ try { return localStorage.getItem(KOD) || ''; } catch (e) { return ''; } }
   function withKey(url){ var c = accessCode(); return c ? url + (url.indexOf('?') >= 0 ? '&' : '?') + 'k=' + encodeURIComponent(c) : url; }
-  var apiProbed = false;
-  async function ensureApi(){
-    if (apiProbed) return; apiProbed = true;
+  var apiP = null;
+  function ensureApi(){ return apiP || (apiP = probeApi()); }
+  async function probeApi(){
     var cur = $('apiBase').value.trim().replace(/\/+$/, '');
     var managed = !cur || cur === API_DEFAULT || cur === API_DEPLOY_OLD || API_CANDS.indexOf(cur) >= 0;
     if (!managed || /\.vercel\.app$/.test(location.hostname)) return;
@@ -1073,7 +1073,16 @@ function poleOf(g){
       } catch (e) {}
       clearTimeout(t);
     }
+    /* hiçbiri yanıt vermedi: eski çalışan yayına dön (erişim kodu kapalıyken sorgular yine çalışır) */
+    if (cur !== API_DEPLOY_OLD) { $('apiBase').value = API_DEPLOY_OLD; memoCache.clear(); }
   }
+  function rebase(url){
+    var b = base();
+    for (var i = 0; i < API_CANDS.length; i++) if (url.indexOf(API_CANDS[i]) === 0) return b + url.slice(API_CANDS[i].length);
+    if (url.indexOf(API_DEPLOY_OLD) === 0) return b + url.slice(API_DEPLOY_OLD.length);
+    return url;
+  }
+  ensureApi();
   async function accessCheck(code){
     await ensureApi();
     var r = await fetch(base() + '/api/auth?k=' + encodeURIComponent(code), {cache: 'no-store'});
@@ -1183,6 +1192,7 @@ function poleOf(g){
   }
 
   async function fetchOnce(url){
+    await ensureApi(); url = rebase(url);
     var ctrl = new AbortController();
     var t = setTimeout(function(){ ctrl.abort(); }, 25000);
     try {

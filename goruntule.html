@@ -21,7 +21,7 @@ table{border-collapse:collapse;margin-top:4px}td{padding:2px 8px 2px 0;vertical-
 .lab{background:rgba(255,255,255,.92);border:1px solid #1c4587;border-radius:4px;padding:1px 5px;font-weight:600;font-size:12px;box-shadow:none;color:#17212b}
 .lab:before{display:none}
 footer{font-size:11px;color:#5a6a80;padding:4px 10px;background:#f6f8fb;border-top:1px solid #d6dde8}
-@media(max-width:700px){main{flex-direction:column}#list{width:100%;height:30%;border-right:0;border-bottom:1px solid #d6dde8;order:2}#map{order:1}}
+@media(max-width:700px){main{flex-direction:column}#list{width:100%;height:30%;min-height:90px;border-right:0;border-bottom:1px solid #d6dde8;order:2;-webkit-overflow-scrolling:touch}#map{order:1;min-height:45vh}}
 </style></head><body>
 <header><div id="logo"></div><div class="t"><b id="firm"></b><small id="who"></small></div>
 <div class="bar"><select id="bm"><option value="sat">Uydu</option><option value="street">Harita</option><option value="osm">OSM</option></select><button id="loc" type="button">Konumum</button></div></header>
@@ -95,7 +95,8 @@ D.items.forEach(function(it, i){
 function syncLab(){ document.getElementById('map').classList.toggle('hl', map.getZoom() < 15); var d = map.getZoom() < 15 ? 'none' : ''; document.querySelectorAll('.lab').forEach(function(e){ e.style.display = d; }); }
 map.on('zoomend', syncLab);
 if (group.getLayers().length) map.fitBounds(group.getBounds(), {padding: [30, 30]}); else map.setView([39, 35], 6);
-map.whenReady(syncLab);
+map.whenReady(function(){syncLab();setTimeout(function(){map.invalidateSize();if(group.getLayers().length)map.fitBounds(group.getBounds(),{padding:[30,30]});},150);});
+window.addEventListener('orientationchange',function(){setTimeout(function(){map.invalidateSize();},300);});
 var me = null;
 document.getElementById('loc').addEventListener('click', function(){
   if (!navigator.geolocation) return alert('Konum bu cihazda desteklenmiyor.');
@@ -107,16 +108,44 @@ document.getElementById('loc').addEventListener('click', function(){
 });
 
 }
+async function sharedData(id){
+  // New links load from the same website, avoiding Safari cross-origin restrictions.
+  var urls = ['/api/share?id=' + encodeURIComponent(id)];
+  // Keep old links from GitHub Pages working through the new sharing service.
+  if (/github\.io$/i.test(location.hostname)) urls.push('https://toplu-parsel-sorgu-tdqp.vercel.app/api/share?id=' + encodeURIComponent(id));
+  var lastError = new Error('Paylaşım servisine ulaşılamadı');
+  for (var n = 0; n < urls.length; n++) {
+    try {
+      var response = await fetch(urls[n], {headers: {'Accept': 'application/json'}, cache: 'no-store'});
+      if (!response.ok) throw new Error('Paylaşım HTTP ' + response.status);
+      var data = await response.json();
+      if (!data || !Array.isArray(data.items)) throw new Error('Paylaşım verisi geçersiz');
+      return data;
+    } catch (e) { lastError = e; }
+  }
+  throw lastError;
+}
 (async function(){
   try {
-    var bm = /^#b=([A-Za-z0-9-]+)$/.exec(location.hash);
-    if (bm) { var rr = await fetch('https://jsonblob.com/api/jsonBlob/' + bm[1], {headers: {'Accept': 'application/json'}}); if (!rr.ok) throw 0; D = await rr.json(); main(); return; }
-    var h = location.hash.replace(/^#g=/, ''); if (!h) throw 0;
-    var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    if (k === 'z') u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
-    D = JSON.parse(new TextDecoder().decode(u));
-  } catch (e) { document.body.innerHTML = '<p style="padding:24px;font:16px system-ui">Bağlantı geçersiz veya eksik. Gönderen kişiden linki yeniden isteyin.</p>'; return; }
-  main();
+    var id = new URLSearchParams(location.search).get('id');
+    var oldId = /^#b=([A-Za-z0-9-]+)$/.exec(location.hash);
+    if (!id && oldId) id = oldId[1];
+    if (id) {
+      D = await sharedData(id);
+    } else {
+      var h = location.hash.replace(/^#g=/, ''); if (!h) throw new Error('Bağlantı verisi eksik');
+      var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      if (k === 'z') {
+        if (!window.DecompressionStream) throw new Error('Bu Safari sürümü sıkıştırılmış linkleri desteklemiyor');
+        u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+      }
+      D = JSON.parse(new TextDecoder().decode(u));
+    }
+    if (!D || !Array.isArray(D.items)) throw new Error('Parsel verisi geçersiz');
+    main();
+  } catch (e) {
+    document.body.innerHTML = '<div style="padding:28px;font:16px/1.5 system-ui"><b>Harita bağlantısı açılamadı.</b><p>Bağlantı geçici olarak erişilemiyor veya eksik olabilir. İnternetinizi kontrol edip yeniden deneyin; sorun sürerse gönderen kişiden yeni bağlantı isteyin.</p><button type="button" onclick="location.reload()" style="padding:10px 16px">Tekrar dene</button></div>';
+  }
 })();
 </script></body></html>

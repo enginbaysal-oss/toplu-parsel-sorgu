@@ -535,6 +535,18 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         </label>
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
+      <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Önce haritada en az bir parseli bulun, sonra Link oluştur düğmesine basın.</div>
+        <div id="shareReady" hidden style="margin-top:9px">
+          <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
+          <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
+          <div class="row" style="margin-top:10px">
+            <a id="sharePreview" class="btnlink" target="_blank" rel="noopener noreferrer" style="font-weight:700">Haritayı aç</a>
+            <a id="shareWhatsapp" class="btnlink primary" target="_blank" rel="noopener noreferrer">WhatsApp'ta gönder</a>
+            <button id="shareCopy" type="button">Linki kopyala</button>
+          </div>
+        </div>
+      </div>
       <button id="btnGeo" type="button" hidden disabled></button><button id="btnKml" type="button" hidden disabled></button><button id="btnCsv" type="button" hidden disabled></button><button id="btnView" type="button" hidden disabled></button><button id="btnLink" type="button" hidden disabled></button>
     </section>
 
@@ -1756,9 +1768,20 @@ function poleOf(g){
     abort = true; group.clearLayers(); rows = []; selected = null; $('list').value = ''; showNotice(''); save(); renderTable();
   });
   $('btnFit').addEventListener('click', fitAll);
-  function syncDl(){ var b = $({geo: 'btnGeo', view: 'btnView', link: 'btnLink', kml: 'btnKml', csv: 'btnCsv'}[$('dlType').value]); $('btnDl').disabled = !b || b.disabled; }
+  function syncDl(){
+    var type = $('dlType').value;
+    $('sharePanel').hidden = type !== 'link';
+    $('btnDl').textContent = type === 'link' ? (shareBusy ? 'Link hazırlanıyor…' : 'Link oluştur') : 'İndir';
+    if (type === 'link') { $('btnDl').disabled = shareBusy; return; }
+    var b = $({geo:'btnGeo',view:'btnView',kml:'btnKml',csv:'btnCsv'}[type]);
+    $('btnDl').disabled = !b || b.disabled;
+  }
   $('dlType').addEventListener('change', syncDl);
-  $('btnDl').addEventListener('click', function(){ var b = $({geo: 'btnGeo', view: 'btnView', link: 'btnLink', kml: 'btnKml', csv: 'btnCsv'}[$('dlType').value]); if (b && !b.disabled) b.click(); });
+  $('btnDl').addEventListener('click', function(){
+    if ($('dlType').value === 'link') { createShareLink(); return; }
+    var b = $({geo:'btnGeo',view:'btnView',kml:'btnKml',csv:'btnCsv'}[$('dlType').value]);
+    if (b && !b.disabled) b.click();
+  });
   $('btnUpload').addEventListener('click', function(){ $({excel: 'btnExcel', photo: 'btnPhoto', backup: 'btnImport'}[$('upType').value]).click(); });
   (function(){
     var sp = $('splitter'), app = document.querySelector('.app'), KEY = 'parsel-harita-sbw';
@@ -1955,32 +1978,55 @@ function poleOf(g){
       return VIEW_URL + '?id=' + encodeURIComponent(result.id);
     } finally { clearTimeout(t); }
   }
-  function showSharePreview(url){
-    showNotice('Müşteri bağlantısı hazır. Göndermeden önce buradan açıp kontrol edebilirsiniz.', true);
-    var notice = $('notice'), a = document.createElement('a');
-    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    a.textContent = 'Haritayı önizle';
-    a.style.cssText = 'display:inline-block;margin-top:8px;padding:8px 10px;background:var(--panel);color:var(--accent);border-radius:8px;font-weight:700;text-decoration:underline';
-    notice.appendChild(document.createElement('br')); notice.appendChild(a);
+  var shareBusy = false, shareUrl = '';
+  function shareMessage(message, error) {
+    $('shareStatus').textContent = message;
+    $('shareStatus').style.color = error ? 'var(--crit)' : 'var(--ink)';
+    $('sharePanel').hidden = false;
   }
-  $('btnLink').addEventListener('click', async function(){
-    if (this.disabled) return;
-    this.disabled = true;
+  async function createShareLink(){
+    if (shareBusy) return;
+    $('shareReady').hidden = true;
+    shareUrl = '';
+    $('dlType').value = 'link';
+    if (!foundRows().length) {
+      shareMessage('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada bulun ve görünür hale getirin.', true);
+      syncDl();
+      return;
+    }
+    shareBusy = true;
+    shareMessage('Parsel bağlantısı hazırlanıyor…');
+    syncDl();
     try {
-      showNotice('Müşteri bağlantısı hazırlanıyor…', true);
       var url = await shortLink();
-      showSharePreview(url);
-      var P = window.Capacitor && window.Capacitor.Plugins;
-      if (P && P.Share) { await P.Share.share({title: 'Parsel haritası', url: url, dialogTitle: 'Müşteriye gönder'}); return; }
-      if (navigator.share) {
-        try { await navigator.share({title: 'Parsel haritası', url: url}); return; }
-        catch (e) { if (e && e.name === 'AbortError') return; }
+      shareUrl = url;
+      $('shareLinkText').value = url;
+      $('sharePreview').href = url;
+      $('shareWhatsapp').href = 'https://wa.me/?text=' + encodeURIComponent('Parsel haritası: ' + url);
+      $('shareReady').hidden = false;
+      shareMessage('Bağlantı hazır. Aşağıdan WhatsApp ile gönderin, önizleyin veya kopyalayın.');
+    } catch(e) {
+      shareMessage('Link oluşturulamadı: ' + (e && e.message ? e.message : String(e)) + '. Başarısız bağlantı paylaşılmadı.', true);
+    } finally {
+      shareBusy = false;
+      syncDl();
+    }
+  }
+  $('btnLink').addEventListener('click', createShareLink);
+  $('shareCopy').addEventListener('click', async function(){
+    if (!shareUrl) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        $('shareLinkText').focus(); $('shareLinkText').select();
+        if (!document.execCommand('copy')) throw new Error('Kopyalama kullanılamıyor');
       }
-      try { await navigator.clipboard.writeText(url); showSharePreview(url); }
-      catch (e) { window.prompt('Linki kopyalayın:', url); }
-    } catch (e) {
-      showNotice('Müşteri linki oluşturulamadı: ' + e.message + '. Hatalı/çok uzun bağlantı WhatsApp’a gönderilmedi.');
-    } finally { this.disabled = false; }
+      shareMessage('Bağlantı kopyalandı. Müşterinize WhatsApp veya mesajla gönderebilirsiniz.');
+    } catch(e) {
+      $('shareLinkText').focus(); $('shareLinkText').select();
+      shareMessage('Link seçildi. Kopyala seçeneğini kullanın.');
+    }
   });
   $('btnView').addEventListener('click', function(){
     var d = new Date(), z = function(n){ return String(n).padStart(2, '0'); };

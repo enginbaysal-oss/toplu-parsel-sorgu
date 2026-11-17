@@ -536,7 +536,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
       <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
-        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Önce haritada en az bir parseli bulun, sonra Link oluştur düğmesine basın.</div>
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.27 · Güncel paylaşım. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
         <div id="shareReady" hidden style="margin-top:9px">
           <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
           <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.26</summary>
+        <summary>Ayarlar · sürüm 12.27</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1965,58 +1965,59 @@ function poleOf(g){
   // eliminating Android cross-origin share-data requests entirely.
   // The customer gets a server-rendered HTML page with the parcel data inside.
   // There is no second cross-origin fetch on Android or in the WhatsApp browser.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118e';
-  async function shortLink(){
+  // 12.27: Prefer self-contained data links. These do not contact a parcel
+  // share server when a customer opens them on an Android phone.
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118f';
+  async function portableLink(data) {
+    var mobile = JSON.parse(JSON.stringify(data));
+    if (mobile.brand) mobile.brand.logo = '';
+    var bytes = new TextEncoder().encode(JSON.stringify(mobile)), kind = 'p';
+    if (window.CompressionStream) {
+      try {
+        var compressed = new Uint8Array(await new Response(
+          new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
+        ).arrayBuffer());
+        if (compressed.length < bytes.length) { bytes = compressed; kind = 'q'; }
+      } catch (e) { /* Fall back to unsqueezed data. */ }
+    }
+    var binary = '';
+    for (var i = 0; i < bytes.length; i += 8192)
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+    var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
+    return VIEW_URL + '#g=' + kind + token;
+  }
+  async function shortLink() {
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
-    // The same data stays available in the HTML download feature; this only
-    // creates a public-by-link copy for the customer.
-    var content = JSON.stringify(data);
-    var hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
+    // Fast path: no API request, no CORS and no server-read dependency on Android.
+    var inline = await portableLink(data);
+    if (inline.length <= 3000) return inline;
+    // Larger maps need short public links. Server validates that the rendered
+    // map is ready, not just that the record has been stored.
+    var content = JSON.stringify(data), hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
     var custom = base();
     if (custom && hosts.indexOf(custom) === -1 && /^https:\/\//.test(custom)) hosts.push(custom);
-    var problem = '';
+    var errors = [];
     for (var n = 0; n < hosts.length; n++) {
-      var host = hosts[n], ctrl = new AbortController();
-      var timeout = setTimeout(function(){ ctrl.abort(); }, 16000);
+      var host = hosts[n], ctrl = new AbortController(), timeout = setTimeout(function(){ ctrl.abort(); }, 13000);
       try {
         var response = await fetch(host + '/api/share', {
-          method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
-          body: content, signal:ctrl.signal
+          method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json'},
+          body: content, signal: ctrl.signal
         });
         var stored = await response.json().catch(function(){ return {}; });
         if (!response.ok || !stored.id || !/^[A-Za-z0-9-]{8,102}$/.test(stored.id))
-          throw new Error(stored.error || ('Paylaşım kayıt hatası HTTP ' + response.status));
+          throw new Error(stored.error || ('HTTP ' + response.status));
         var url = host + '/api/view?id=' + encodeURIComponent(stored.id);
-        // Do not distribute a link unless its fully populated HTML was returned.
         var verify = await fetch(url, {cache:'no-store',signal:ctrl.signal});
-        var ct = verify.headers.get('content-type') || '';
-        if (!verify.ok || !/text\/html/i.test(ct)) throw new Error('Müşteri haritası doğrulanamadı: HTTP ' + verify.status);
-        var header = verify.headers.get('x-parsel-viewer');
-        if (header !== 'ready') throw new Error('Harita görüntüleyici bu sunucuda hazır değil');
+        if (!verify.ok || (verify.headers.get('x-parsel-viewer') || '') !== 'ready')
+          throw new Error('Harita önizleme servisi hazır değil');
         return url;
-      } catch(e) {
-        problem = e && e.message ? e.message : 'Sunucuya erişilemedi';
-      } finally {clearTimeout(timeout);}
+      } catch(e) { errors.push((host.split('/')[2] || host) + ': ' + (e.message || e)); }
+      finally { clearTimeout(timeout); }
     }
-    // A single-parcel map can still be embedded directly without any API.
-    if(data.brand) data.brand.logo = '';
-    var bytes = new TextEncoder().encode(JSON.stringify(data)), kind = 'p';
-    if(window.CompressionStream) {
-      try {
-        var zip = new Uint8Array(await new Response(
-          new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
-        ).arrayBuffer());
-        if(zip.length < bytes.length){bytes=zip;kind='q';}
-      }catch(e){}
-    }
-    var binary='';
-    for(var j=0;j<bytes.length;j+=8192)
-      binary+=String.fromCharCode.apply(null,bytes.subarray(j,j+8192));
-    var token=btoa(binary).replace(/=+$/,'').replace(/\+/g,'.a').replace(/\//g,'.b');
-    var inlineUrl=VIEW_URL+'#g='+kind+token;
-    if(inlineUrl.length <= 2400)return inlineUrl;
-    throw new Error('Paylaşım sunucuları kullanılamıyor ('+problem+'). Bu kadar parsel tek bir WhatsApp linkine sığmıyor. HTML dosyası indirilebilir.');
+    throw new Error('Büyük parsel listesi için kısa link sunucusuna ulaşılamadı. ' +
+      'Daha az parsel seçin veya HTML dosyası olarak paylaşın. ' + errors.join(' | ').slice(0,180));
   }
   var shareBusy = false, shareUrl = '';
   function shareMessage(message, error) {

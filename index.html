@@ -531,7 +531,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <div class="row">
         <label class="f grow">Yedekle / dışa aktar
-          <select id="dlType"><option value="geo">Yedek (.geojson)</option><option value="link">Müşteriye link gönder (telefonda açılır)</option><option value="view">Müşteri görüntüleyici (.html dosya)</option><option value="kml">KML</option><option value="csv">CSV</option></select>
+          <select id="dlType"><option value="geo">Yedek (.geojson)</option><option value="link">Müşteriye link gönder (telefonda açılır)</option><option value="view">Dosya (.html) – bilgisayarda açılır</option><option value="kml">KML</option><option value="csv">CSV</option></select>
         </label>
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
@@ -540,7 +540,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.19</summary>
+        <summary>Ayarlar · sürüm 12.20</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -626,6 +626,8 @@ footer{font-size:11px;color:#5a6a80;padding:4px 10px;background:#f6f8fb;border-t
 var D = /*DATA*/null;
 function esc(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function main(){
+function dec(a){ if (typeof a[0] === 'number') { var o = [], x = 0, y = 0; for (var i = 0; i < a.length; i += 2) { x += a[i]; y += a[i + 1]; o.push([x / 1e5, y / 1e5]); } return o; } return a.map(dec); }
+D.items.forEach(function(it){ if (it.e) it.g = {type: it.g.type, coordinates: dec(it.g.coordinates)}; });
 document.title = D.title || 'Parsel Görüntüleyici';
 var B = D.brand || {};
 if (B.logo) document.getElementById('logo').innerHTML = '<img alt="" src="' + esc(B.logo) + '">';
@@ -1879,7 +1881,16 @@ function poleOf(g){
     });
     var data = {title: brand.firm ? brand.firm + ' · Parsel Görüntüleyici' : 'Parsel Görüntüleyici', date: z(d.getDate()) + '.' + z(d.getMonth() + 1) + '.' + d.getFullYear(),
       brand: {firm: brand.firm, agent: brand.agent, phone: brand.phone, mail: brand.mail, note: brand.note, logo: brand.logo}, items: items};
-    if (prec) { var rd = function(a){ return typeof a[0] === 'number' ? a.map(function(v){ return +v.toFixed(prec); }) : a.map(rd); }; items.forEach(function(it){ it.g = {type: it.g.type, coordinates: rd(it.g.coordinates)}; }); }
+    if (prec) {
+      /* koordinatlar 1e5 ile tamsayıya çevrilip fark olarak saklanır: link kısa kalır */
+      var enc = function(a){
+        if (!a.length || typeof a[0][0] !== 'number') return a.map(enc);
+        var o = [], px = 0, py = 0;
+        a.forEach(function(v, i){ var x = Math.round(v[0] * 1e5), y = Math.round(v[1] * 1e5); if (i && x === px && y === py) return; o.push(x - px, y - py); px = x; py = y; });
+        return o;
+      };
+      items.forEach(function(it){ it.g = {type: it.g.type, coordinates: it.g.coordinates.map ? enc(it.g.coordinates) : []}; it.e = 1; });
+    }
     return data;
   }
   function viewerHtml(){
@@ -1897,7 +1908,7 @@ function poleOf(g){
   $('btnLink').addEventListener('click', async function(){
     try {
       var url = await viewerLink();
-      if (url.length > 60000) { showNotice('Çok fazla parsel var, link çok uzun oldu. "Müşteri görüntüleyici (.html dosya)" seçeneğini kullanın.', true); return; }
+      if (url.length > 60000) { showNotice('Çok fazla parsel var, link çok uzun oldu. "Dosya (.html)" seçeneğini kullanın (yalnızca bilgisayarda açılır).', true); return; }
       var P = window.Capacitor && window.Capacitor.Plugins;
       if (P && P.Share) { await P.Share.share({title: 'Parsel haritası', url: url, dialogTitle: 'Müşteriye gönder'}); return; }
       if (navigator.share) { try { await navigator.share({title: 'Parsel haritası', url: url}); return; } catch (e) { if (e && e.name === 'AbortError') return; } }

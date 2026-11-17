@@ -32,6 +32,8 @@ footer{font-size:11px;color:#5a6a80;padding:4px 10px;background:#f6f8fb;border-t
 var D = /*DATA*/null;
 function esc(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function main(){
+function dec(a){ if (typeof a[0] === 'number') { var o = [], x = 0, y = 0; for (var i = 0; i < a.length; i += 2) { x += a[i]; y += a[i + 1]; o.push([x / 1e5, y / 1e5]); } return o; } return a.map(dec); }
+D.items.forEach(function(it){ if (it.e) it.g = {type: it.g.type, coordinates: dec(it.g.coordinates)}; });
 document.title = D.title || 'Parsel Görüntüleyici';
 var B = D.brand || {};
 if (B.logo) document.getElementById('logo').innerHTML = '<img alt="" src="' + esc(B.logo) + '">';

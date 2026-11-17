@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.25</summary>
+        <summary>Ayarlar · sürüm 12.26</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -965,7 +965,7 @@ function poleOf(g){
   var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var API_OLD = 'https://cbsapi.tkgm.gov.tr/megsiswebapi.v3.1/api';
   var API_DEPLOY_OLD = 'https://toplu-parsel-sorgu-tdqp-9tdx0xge3-engin16.vercel.app';
-  var API_CANDS = ['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app', 'https://toplu-parsel-sorgu-tdqp-engin16.vercel.app', 'https://toplu-parsel-sorgu-engin16.vercel.app'];
+  var API_CANDS = ['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app', 'https://toplu-parsel-sorgu-tdqp-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-tdqp-engin16.vercel.app', 'https://toplu-parsel-sorgu-engin16.vercel.app'];
   var API_DEFAULT = /\.vercel\.app$/.test(location.hostname) ? location.origin : API_CANDS[0];
   var LS = 'parsel-harita-v1';
 
@@ -1963,7 +1963,7 @@ function poleOf(g){
   // The public viewer and its API must use one origin for iPhone Safari.
   // Standalone public viewer. Data travels inside the link's fragment,
   // eliminating Android cross-origin share-data requests entirely.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118b';
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118c';
   async function shortLink(){
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
@@ -1991,16 +1991,17 @@ function poleOf(g){
     // Reject instead of handing the customer a link that looks valid but fails.
     if (url.length > 3500) {
       /* büyük liste: sunucuya kaydet, kısa link ver (link çalışan sunucunun adresini taşır) */
-      var b = base();
-      var ctrl = new AbortController(), tm = setTimeout(function(){ ctrl.abort(); }, 25000), rr;
-      try {
-        rr = await fetch(b + '/api/share', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), signal: ctrl.signal});
-      } catch (e1) { throw new Error('Büyük liste için paylaşım sunucusuna ulaşılamadı (internet?).'); }
-      finally { clearTimeout(tm); }
-      var rj = null; try { rj = await rr.json(); } catch (e2) {}
-      if (!rr.ok || !rj || !rj.id) {
-        throw new Error(rr.status === 404 ? 'Paylaşım servisi sunucuda bulunamadı (adres: ' + b + '). Vercel adresini bana bildirin.' : 'Paylaşım kaydedilemedi: ' + ((rj && rj.error) || ('HTTP ' + rr.status)));
+      var hosts = [base()].concat(API_CANDS.concat([API_DEPLOY_OLD])).filter(function(u, k, arr){ return arr.indexOf(u) === k; }), b = '', rj = null, lastErr = '';
+      for (var hi = 0; hi < hosts.length && !(rj && rj.id); hi++) {
+        var ctrl = new AbortController(), tm = setTimeout(function(){ ctrl.abort(); }, 12000);
+        try {
+          var rr = await fetch(hosts[hi] + '/api/share', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), signal: ctrl.signal});
+          var jj = null; try { jj = await rr.json(); } catch (e2) {}
+          if (rr.ok && jj && jj.id) { rj = jj; b = hosts[hi]; } else lastErr = (jj && jj.error) || ('HTTP ' + rr.status);
+        } catch (e1) { lastErr = 'ulaşılamadı'; }
+        finally { clearTimeout(tm); }
       }
+      if (!rj) throw new Error('Paylaşım servisi bulunamadı (' + lastErr + '). Sunucu adresini bana bildirin.');
       return VIEW_URL + '&id=' + encodeURIComponent(rj.id) + '&h=' + encodeURIComponent(b);
     }
     return url;

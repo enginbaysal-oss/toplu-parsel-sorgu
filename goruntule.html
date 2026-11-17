@@ -215,7 +215,7 @@ function scriptSharedData(id, hosts){
 async function sharedData(id){
   /* h: linki üreten uygulamanın gerçekten çalışan sunucu adresi */
   var hp = new URLSearchParams(location.search).get('h') || '';
-  var hosts = (/^https:\/\/[a-z0-9.-]+\.vercel\.app$/.test(hp) ? [hp] : []).concat(['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app']);
+  var hosts = (/^https:\/\/[a-z0-9.-]+\.vercel\.app$/.test(hp) ? [hp] : []).concat(['https://toplu-parsel-sorgu-tdqp-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app']);
   if (!/github\.io$/i.test(location.hostname)) {
     statusMessage('Parsel verileri yükleniyor…');
     try { return await fetchSharedData(location.origin + '/api/share?id=' + encodeURIComponent(id), 10000); }

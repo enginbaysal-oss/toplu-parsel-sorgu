@@ -726,20 +726,22 @@ function parseList(text, defIl, defIlce){
   function split(l){ return l.split(delim).map(function(c){ return c.trim().replace(/^"|"$/g, '').trim(); }); }
   var cols = null, start = 0;
   var h = split(lines[0]).map(norm);
-  var hasAP = h.indexOf('ADA PARSEL') >= 0 || h.indexOf('ADA PARSEL NO') >= 0;
-  if (hasAP || h.indexOf('ADA') >= 0 || h.indexOf('ADA NO') >= 0) {
-    if (hasAP || h.indexOf('PARSEL') >= 0 || h.indexOf('PARSEL NO') >= 0) {
-      cols = {};
-      h.forEach(function(c, i){
-        if (c === 'IL' || c === 'IL ADI') cols.il = i;
-        else if (c === 'ILCE' || c === 'ILCE ADI') cols.ilce = i;
-        else if (/^(MAHALLE|MAH|KOY)/.test(c)) cols.mah = i;
-        else if (c === 'ADA' || c === 'ADA NO') cols.ada = i;
-        else if (c === 'ADA PARSEL' || c === 'ADA PARSEL NO') cols.ap = i;
-        else if (c === 'PARSEL' || c === 'PARSEL NO') cols.parsel = i;
-      });
-      start = 1;
-    }
+  // Türkiye'de kullanılan farklı Excel başlıklarını aynı alanlara eşleştir.
+  function headerField(c){
+    if (/^(IL|ILI|IL ADI|IL ISMI)$/.test(c)) return 'il';
+    if (/^(ILCE|ILCESI|ILCE ADI|ILCE ISMI)$/.test(c)) return 'ilce';
+    if (/^(MAHALLE|MAHALLESI|MAHALLE ADI|MAH|MAH ADI|KOY|KOYU|KOY ADI)$/.test(c)) return 'mah';
+    if (/^(ADA|ADA NO|ADA NUMARASI)$/.test(c)) return 'ada';
+    if (/^(PARSEL|PARSEL NO|PARSEL NUMARASI)$/.test(c)) return 'parsel';
+    if (/^(ADA PARSEL|ADA PARSEL NO|ADA PARSEL NUMARASI)$/.test(c)) return 'ap';
+    return null;
+  }
+  var fields = h.map(headerField);
+  var hasAP = fields.indexOf('ap') >= 0;
+  if ((hasAP || fields.indexOf('ada') >= 0) && (hasAP || fields.indexOf('parsel') >= 0)) {
+    cols = {};
+    fields.forEach(function(c, i){ if (c) cols[c] = i; });
+    start = 1;
   }
   var out = [];
   for (var i = start; i < lines.length; i++) {
@@ -1073,8 +1075,7 @@ function poleOf(g){
       } catch (e) {}
       clearTimeout(t);
     }
-    /* hiçbiri yanıt vermedi: eski çalışan yayına dön (erişim kodu kapalıyken sorgular yine çalışır) */
-    if (cur !== API_DEPLOY_OLD) { $('apiBase').value = API_DEPLOY_OLD; memoCache.clear(); }
+    /* Çalıştığı doğrulanamayan eski dağıtıma sessizce geçme: kullanıcıya gerçek bağlantı hatasını göster. */
   }
   function rebase(url){
     var b = base();
@@ -1198,7 +1199,13 @@ function poleOf(g){
     try {
       var res = await fetch(withKey(url), {headers: {Accept: 'application/json'}, signal: ctrl.signal});
       if (res.status === 401 && ACCESS_REQUIRED) { try { localStorage.removeItem(KOD); } catch (e0) {} lockShow('Erişim kodu geçersiz veya süresi dolmuş. Yeni kodu girin.'); var ue = new Error('Yetkisiz: erişim kodu gerekli'); ue.status = 401; throw ue; }
-      if (res.status === 404) { var nf = new Error('Parsel bulunamadı'); nf.notFound = true; throw nf; }
+      if (res.status === 404) {
+        // Proxy/API yolu eksikse bunu 'parsel yok' diye kaydetme.
+        var parcelPath = /\/parsel\/\d+\/\d+\/\d+(?:\?|$)/.test(url);
+        var jsonReply = /json/i.test(res.headers.get('content-type') || '');
+        var nf = new Error(parcelPath && jsonReply ? 'Parsel bulunamadı' : 'Parsel sorgu servisi bu adresi bulamadı (HTTP 404). Servis ayarını kontrol edin.');
+        nf.notFound = parcelPath && jsonReply; nf.status = 404; throw nf;
+      }
       if (!res.ok) {
         var he = new Error('Sunucu yanıtı HTTP ' + res.status + ' · ' + url);
         he.status = res.status;
@@ -1267,7 +1274,7 @@ function poleOf(g){
     } catch (e) {
       r.status = e.notFound ? 'yok' : 'hata';
       r.note = e.notFound ? 'Bu ada ve parsel mahallede bulunamadı' : e.message;
-      if (e.status === 403 || e.status === 429) { blocked = e.status; r.note = 'TKGM erişimi reddetti (HTTP ' + e.status + ')'; }
+      if (e.status === 403 || e.status === 429) { blocked = e.status; r.note = 'Parsel veri servisi erişimi reddetti (HTTP ' + e.status + ')'; }
       if (e.network) showNotice(e.message);
     }
     scheduleRender();
@@ -1700,15 +1707,37 @@ function poleOf(g){
     var errs = {}, nErr = 0;
     rows.forEach(function(r){ if (r.status === 'hata' && r.note) { errs[r.note] = (errs[r.note] || 0) + 1; nErr++; } });
     if (blocked) {
-      showNotice('TKGM sunucusu isteklerinizi geçici olarak reddetti (HTTP ' + blocked + '). Sorgu durduruldu ki engel uzamasın. Bir süre bekleyin (birkaç dakika ile birkaç saat arası), ya da Wi-Fi yerine mobil veriyi (veya tersini) deneyin. Sonra "Hatalıları yeniden dene" ile kaldığınız yerden devam edin.');
+      showNotice('Parsel veri servisi erişimi reddetti (HTTP ' + blocked + '). Bu hata Excel/elle girişten kaynaklanmaz. Servise izinli erişim ve sunucu ayarlarını kontrol edin; erişim sağlanmadan tekrar denemek sonucu değiştirmez.');
     } else if (nErr) {
       var top = Object.keys(errs).sort(function(a, b){ return errs[b] - errs[a]; })[0];
       showNotice(nErr + ' satırda hata. En sık görülen neden (' + errs[top] + ' satır): ' + top);
     }
   }
-  $('btnRun').addEventListener('click', function(){
+  $('btnRun').addEventListener('click', async function(){
+    if (running) { showNotice('Bir sorgu zaten devam ediyor.'); return; }
     var parsed = parseList($('list').value, $('defIl').value.trim(), $('defIlce').value.trim());
     if (!parsed.length) { showNotice('Önce parsel listesini yapıştırın.'); return; }
+    if (!parsed.some(function(p){ return !p.parseError; })) {
+      showNotice('Liste okunamadı: ' + parsed[0].parseError + '. İl / İlçe / Mahalle / Ada / Parsel sütunlarını kontrol edin.'); return;
+    }
+    var btn = this;
+    btn.disabled = true;
+    showNotice('Parsel sorgu bağlantısı kontrol ediliyor…', true);
+    try {
+      await ensureApi();
+      var b = base();
+      var ils = await memo('il', function(){
+        return cachedList('il@' + b, function(){
+          return fetchJSON(b + '/idariYapi/ilListe').then(function(j){ return listItems(j, 'il'); });
+        });
+      });
+      if (!ils || !ils.length) throw new Error('İl listesi alınamadı; servis geçerli veri döndürmedi.');
+    } catch (e) {
+      showNotice('Sorgu başlatılamadı: ' + e.message + ' Önce Ayarlar > Bağlantıyı sına ile servisi kontrol edin. Mevcut sonuçlarınız korunmuştur.');
+      btn.disabled = false;
+      return;
+    }
+    btn.disabled = false;
     group.clearLayers(); rows = []; selected = null;
     parsed.forEach(function(p){
       rows.push({il: p.il, ilce: p.ilce, mah: p.mah, ada: p.ada, parsel: p.parsel,

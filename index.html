@@ -1984,7 +1984,7 @@ function poleOf(g){
     var binary = '';
     for (var i = 0; i < bytes.length; i += 8192)
       binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-    var token = btoa(binary).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+    var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
     var url = VIEW_URL + '#g=' + kind + token;
     // Long WhatsApp links are often broken or cut off in mobile messengers.
     // Reject instead of handing the customer a link that looks valid but fails.

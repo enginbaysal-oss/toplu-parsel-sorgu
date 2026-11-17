@@ -58,8 +58,20 @@ function failScreen(e){
   if (map) {
     map.innerHTML = '';
     var p = document.createElement('p'); p.style.cssText = 'margin:16px;font-size:14px;line-height:1.5';
-    p.textContent = 'Bağlantıyı Chrome tarayıcısında açmayı deneyin. Hata: ' + msg;
+    p.textContent = 'Parsel verisi sunucudan yüklenemedi. Bağlantı daha sonra yeniden denenebilir.';
     map.appendChild(p);
+    // Alternative viewer shares the same origin as the API; avoids third-party
+    // cross-origin requests even if the primary mobile viewer cannot load data.
+    var id = new URLSearchParams(location.search).get('id');
+    var legacy = /^#b=([A-Za-z0-9-]+)$/.exec(location.hash);
+    if (!id && legacy) id = legacy[1];
+    if (/^[A-Za-z0-9-]{8,110}$/.test(id || '') && /github\.io$/i.test(location.hostname)) {
+      var alt = document.createElement('a');
+      alt.href = 'https://toplu-parsel-sorgu-tdqp.vercel.app/goruntule.html?id=' + encodeURIComponent(id);
+      alt.textContent = 'Alternatif sunucuda haritayı aç';
+      alt.style.cssText = 'display:inline-block;padding:11px 14px;margin:0 16px 14px;background:#1c4587;color:white;border-radius:8px;font-weight:700;text-decoration:none';
+      map.appendChild(alt);
+    }
     var btn = document.createElement('button');
     btn.type = 'button'; btn.textContent = 'Tekrar dene'; btn.style.margin = '0 16px';
     btn.onclick = function(){ location.reload(); };

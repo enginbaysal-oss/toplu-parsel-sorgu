@@ -1963,48 +1963,60 @@ function poleOf(g){
   // The public viewer and its API must use one origin for iPhone Safari.
   // Standalone public viewer. Data travels inside the link's fragment,
   // eliminating Android cross-origin share-data requests entirely.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118c';
+  // The customer gets a server-rendered HTML page with the parcel data inside.
+  // There is no second cross-origin fetch on Android or in the WhatsApp browser.
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118e';
   async function shortLink(){
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
-    // Embedded logo images can inflate links by tens of KB. Keep office and
-    // consultant text, but omit the photo/logo for this portable link.
-    if (data.brand) data.brand.logo = '';
-    var bytes = new TextEncoder().encode(JSON.stringify(data));
-    var kind = 'p';
-    if (window.CompressionStream) {
+    // The same data stays available in the HTML download feature; this only
+    // creates a public-by-link copy for the customer.
+    var content = JSON.stringify(data);
+    var hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
+    var custom = base();
+    if (custom && hosts.indexOf(custom) === -1 && /^https:\/\//.test(custom)) hosts.push(custom);
+    var problem = '';
+    for (var n = 0; n < hosts.length; n++) {
+      var host = hosts[n], ctrl = new AbortController();
+      var timeout = setTimeout(function(){ ctrl.abort(); }, 16000);
       try {
-        var compressed = await new Response(
+        var response = await fetch(host + '/api/share', {
+          method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body: content, signal:ctrl.signal
+        });
+        var stored = await response.json().catch(function(){ return {}; });
+        if (!response.ok || !stored.id || !/^[A-Za-z0-9-]{8,102}$/.test(stored.id))
+          throw new Error(stored.error || ('Paylaşım kayıt hatası HTTP ' + response.status));
+        var url = host + '/api/view?id=' + encodeURIComponent(stored.id);
+        // Do not distribute a link unless its fully populated HTML was returned.
+        var verify = await fetch(url, {cache:'no-store',signal:ctrl.signal});
+        var ct = verify.headers.get('content-type') || '';
+        if (!verify.ok || !/text\/html/i.test(ct)) throw new Error('Müşteri haritası doğrulanamadı: HTTP ' + verify.status);
+        var header = verify.headers.get('x-parsel-viewer');
+        if (header !== 'ready') throw new Error('Harita görüntüleyici bu sunucuda hazır değil');
+        return url;
+      } catch(e) {
+        problem = e && e.message ? e.message : 'Sunucuya erişilemedi';
+      } finally {clearTimeout(timeout);}
+    }
+    // A single-parcel map can still be embedded directly without any API.
+    if(data.brand) data.brand.logo = '';
+    var bytes = new TextEncoder().encode(JSON.stringify(data)), kind = 'p';
+    if(window.CompressionStream) {
+      try {
+        var zip = new Uint8Array(await new Response(
           new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
-        ).arrayBuffer();
-        var zipped = new Uint8Array(compressed);
-        if (zipped.length < bytes.length) { bytes = zipped; kind = 'q'; }
-      } catch (e) { /* Browser may lack gzip support; use raw bytes. */ }
+        ).arrayBuffer());
+        if(zip.length < bytes.length){bytes=zip;kind='q';}
+      }catch(e){}
     }
-    var binary = '';
-    for (var i = 0; i < bytes.length; i += 8192)
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-    /* WhatsApp _ * ~ işaretlerini biçim sayıp linki bozar: yalnız harf, rakam, nokta */
-    var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
-    var url = VIEW_URL + '#g=' + kind + token;
-    // Long WhatsApp links are often broken or cut off in mobile messengers.
-    // Reject instead of handing the customer a link that looks valid but fails.
-    if (url.length > 3500) {
-      /* büyük liste: sunucuya kaydet, kısa link ver (link çalışan sunucunun adresini taşır) */
-      var hosts = [base()].concat(API_CANDS.concat([API_DEPLOY_OLD])).filter(function(u, k, arr){ return arr.indexOf(u) === k; }), b = '', rj = null, lastErr = '';
-      for (var hi = 0; hi < hosts.length && !(rj && rj.id); hi++) {
-        var ctrl = new AbortController(), tm = setTimeout(function(){ ctrl.abort(); }, 12000);
-        try {
-          var rr = await fetch(hosts[hi] + '/api/share', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), signal: ctrl.signal});
-          var jj = null; try { jj = await rr.json(); } catch (e2) {}
-          if (rr.ok && jj && jj.id) { rj = jj; b = hosts[hi]; } else lastErr = (jj && jj.error) || ('HTTP ' + rr.status);
-        } catch (e1) { lastErr = 'ulaşılamadı'; }
-        finally { clearTimeout(tm); }
-      }
-      if (!rj) throw new Error('Paylaşım servisi bulunamadı (' + lastErr + '). Sunucu adresini bana bildirin.');
-      return VIEW_URL + '&id=' + encodeURIComponent(rj.id) + '&h=' + encodeURIComponent(b);
-    }
-    return url;
+    var binary='';
+    for(var j=0;j<bytes.length;j+=8192)
+      binary+=String.fromCharCode.apply(null,bytes.subarray(j,j+8192));
+    var token=btoa(binary).replace(/=+$/,'').replace(/\+/g,'.a').replace(/\//g,'.b');
+    var inlineUrl=VIEW_URL+'#g='+kind+token;
+    if(inlineUrl.length <= 2400)return inlineUrl;
+    throw new Error('Paylaşım sunucuları kullanılamıyor ('+problem+'). Bu kadar parsel tek bir WhatsApp linkine sığmıyor. HTML dosyası indirilebilir.');
   }
   var shareBusy = false, shareUrl = '';
   function shareMessage(message, error) {

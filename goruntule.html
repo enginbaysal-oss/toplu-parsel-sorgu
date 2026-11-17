@@ -202,7 +202,7 @@ function scriptSharedData(id, hosts){
 }
 async function sharedData(id){
   var hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app'];
-  if (!/github\\.io$/i.test(location.hostname)) {
+  if (!/github\.io$/i.test(location.hostname)) {
     statusMessage('Parsel verileri yükleniyor…');
     try { return await fetchSharedData(location.origin + '/api/share?id=' + encodeURIComponent(id), 10000); }
     catch (e) { /* Try cross-origin transport below. */ }

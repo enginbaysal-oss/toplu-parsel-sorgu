@@ -1961,24 +1961,37 @@ function poleOf(g){
     return tpl.replace('/*DATA*/null', function(){ return json; }).replace('/*BOOT*/', 'main();');
   }
   // The public viewer and its API must use one origin for iPhone Safari.
-  var VIEW_ORIGIN = 'https://toplu-parsel-sorgu-tdqp.vercel.app';
-  // Keep the customer viewer and its share API on one origin.
-  // GitHub Pages could load the HTML on Android but cross-origin parcel data was blocked.
-  var VIEW_URL = VIEW_ORIGIN + '/goruntule.html?v=20261117c';
+  // Standalone public viewer. Data travels inside the link's fragment,
+  // eliminating Android cross-origin share-data requests entirely.
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261117d';
   async function shortLink(){
     var data = viewerData(5);
-    if (!data.items.length) throw new Error('Paylaşılacak bulunmuş parsel yok. Önce haritada parseli görüntüleyin.');
-    var ctrl = new AbortController(), t = setTimeout(function(){ ctrl.abort(); }, 20000);
-    try {
-      var r = await fetch(VIEW_ORIGIN + '/api/share', {
-        method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body: JSON.stringify(data), signal: ctrl.signal
-      });
-      var result = await r.json().catch(function(){ return {}; });
-      if (!r.ok) throw new Error(result.error || ('Paylaşım sunucusu HTTP ' + r.status));
-      if (!result.id || !/^[A-Za-z0-9-]{8,100}$/.test(result.id)) throw new Error('Geçerli link alınamadı');
-      return VIEW_URL + '&id=' + encodeURIComponent(result.id);
-    } finally { clearTimeout(t); }
+    if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
+    // Embedded logo images can inflate links by tens of KB. Keep office and
+    // consultant text, but omit the photo/logo for this portable link.
+    if (data.brand) data.brand.logo = '';
+    var bytes = new TextEncoder().encode(JSON.stringify(data));
+    var kind = 'p';
+    if (window.CompressionStream) {
+      try {
+        var compressed = await new Response(
+          new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
+        ).arrayBuffer();
+        var zipped = new Uint8Array(compressed);
+        if (zipped.length < bytes.length) { bytes = zipped; kind = 'q'; }
+      } catch (e) { /* Browser may lack gzip support; use raw bytes. */ }
+    }
+    var binary = '';
+    for (var i = 0; i < bytes.length; i += 8192)
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+    var token = btoa(binary).replace(/=+$/, '').replace(/\\+/g, '-').replace(/\\//g, '_');
+    var url = VIEW_URL + '#g=' + kind + token;
+    // Long WhatsApp links are often broken or cut off in mobile messengers.
+    // Reject instead of handing the customer a link that looks valid but fails.
+    if (url.length > 3500)
+      throw new Error('Bu parsel listesi telefon için güvenli link uzunluğunu aşıyor (' +
+        data.items.length + ' parsel). Daha az parsel seçerek ayrı linkler gönderin. HTML dosyası indirme aynen kullanılabilir.');
+    return url;
   }
   var shareBusy = false, shareUrl = '';
   function shareMessage(message, error) {

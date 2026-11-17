@@ -47,5 +47,7 @@ module.exports=async function(req,res){
   res.setHeader('Content-Type','text/html; charset=utf-8');
   res.setHeader('Cache-Control','public, max-age=60, s-maxage=600');
   res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('X-Parsel-Viewer','ready');
   res.end(page);
 };

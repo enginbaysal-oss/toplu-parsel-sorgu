@@ -1962,7 +1962,8 @@ function poleOf(g){
   }
   // The public viewer and its API must use one origin for iPhone Safari.
   var VIEW_ORIGIN = 'https://toplu-parsel-sorgu-tdqp.vercel.app';
-  var VIEW_URL = VIEW_ORIGIN + '/goruntule.html';
+  // Public static viewer: no Vercel account/session required on Android or WhatsApp.
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html';
   async function shortLink(){
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak bulunmuş parsel yok. Önce haritada parseli görüntüleyin.');

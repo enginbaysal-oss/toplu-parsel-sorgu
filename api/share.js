@@ -1,8 +1,11 @@
-// Parcels shared as public, unguessable links; server-side transport avoids Safari CORS issues.
-const STORE = 'https://jsonblob.com/api/jsonBlob';
+// Public-by-link parcel viewer storage. Never put service secrets in the client.
+const STORES = [
+  {key: 's', url: 'https://superjsonblob.com/api/jsonBlob'},
+  {key: 'j', url: 'https://jsonblob.com/api/jsonBlob'}
+];
 const MAX_BODY = 1500000;
 const MAX_ITEMS = 1000;
-const ID = /^[a-zA-Z0-9-]{8,100}$/;
+const VALID_ID = /^[A-Za-z0-9-]{8,100}$/;
 
 function send(res, code, data) {
   res.statusCode = code;
@@ -10,8 +13,52 @@ function send(res, code, data) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(data));
 }
-module.exports = async function (req, res) {
-  // Public share links are read-only for recipients. No cookies or session tokens are used.
+function getId(r, body) {
+  let loc = r.headers.get('location') || '';
+  let id = loc.match(/\/([A-Za-z0-9-]{8,100})\/?(?:\?.*)?$/)?.[1] || '';
+  if (!id) id = r.headers.get('x-jsonblob') || '';
+  if (!id && body) {
+    try {
+      const j = JSON.parse(body);
+      id = typeof j.id === 'string' ? j.id : (typeof j.blobId === 'string' ? j.blobId : '');
+    } catch (_) {}
+  }
+  return VALID_ID.test(id) ? id : null;
+}
+function validData(data) {
+  return data && typeof data === 'object' && Array.isArray(data.items) &&
+    data.items.length > 0 && data.items.length <= MAX_ITEMS &&
+    data.items.every(it => it && it.g &&
+      (it.g.type === 'Polygon' || it.g.type === 'MultiPolygon') &&
+      typeof it.ada === 'string' && typeof it.parsel === 'string');
+}
+async function saveToStore(store, body) {
+  const response = await fetch(store.url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+    body,
+    signal: AbortSignal.timeout(15000)
+  });
+  // Different versions of the storage API return the id in Location, x-jsonblob or JSON.
+  const resultBody = await response.text();
+  if (!response.ok) throw new Error(store.key + ': HTTP ' + response.status);
+  const id = getId(response, resultBody);
+  if (!id) throw new Error(store.key + ': servis kayıt kodu göndermedi');
+  return store.key + '-' + id;
+}
+async function readFromStore(store, id) {
+  const response = await fetch(store.url + '/' + encodeURIComponent(id), {
+    headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(15000)
+  });
+  if (response.status === 404) return {notFound: true};
+  if (!response.ok) throw new Error(store.key + ': HTTP ' + response.status);
+  const body = await response.text();
+  if (Buffer.byteLength(body, 'utf8') > MAX_BODY) throw new Error('Paylaşım boyutu çok büyük');
+  const parsed = JSON.parse(body);
+  if (!validData(parsed)) throw new Error('Parsel paylaşımı geçersiz');
+  return {data: parsed};
+}
+module.exports = async function(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
@@ -21,37 +68,40 @@ module.exports = async function (req, res) {
   try {
     if (req.method === 'POST') {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      if (!data || typeof data !== 'object' || !Array.isArray(data.items) ||
-          !data.items.length || data.items.length > MAX_ITEMS || !data.items.every(
-            it => it && it.g && (it.g.type === 'Polygon' || it.g.type === 'MultiPolygon') &&
-              typeof it.ada === 'string' && typeof it.parsel === 'string')) {
-        return send(res, 400, {error: 'Geçersiz parsel listesi'});
-      }
+      if (!validData(data)) return send(res, 400, {error: 'Geçersiz parsel listesi'});
       const body = JSON.stringify(data);
       if (Buffer.byteLength(body, 'utf8') > MAX_BODY) return send(res, 413, {error: 'Paylaşım boyutu çok büyük'});
-      const response = await fetch(STORE, {
-        method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-        body, signal: AbortSignal.timeout(15000)
-      });
-      const location = response.headers.get('location') || '';
-      const id = location.match(/\/([a-zA-Z0-9-]{8,100})\/?(?:\?.*)?$/)?.[1];
-      if (!response.ok || !id || !ID.test(id)) return send(res, 502, {error: 'Paylaşım kaydı alınamadı'});
-      return send(res, 201, {id});
+      let errors = [];
+      for (const store of STORES) {
+        try {
+          const id = await saveToStore(store, body);
+          // Verify that the saved link can actually be opened before returning it.
+          const result = await readFromStore(store, id.slice(2));
+          if (result.data) return send(res, 201, {id});
+          errors.push(store.key + ': kayıt tekrar okunamadı');
+        } catch (error) {
+          errors.push(error.message);
+        }
+      }
+      return send(res, 502, {error: 'Kayıt servisleri yanıt vermedi (' + errors.join('; ').slice(0, 180) + '). Lütfen yeniden deneyin.'});
     }
-    const id = String(req.query && req.query.id || '');
-    if (!ID.test(id)) return send(res, 400, {error: 'Geçersiz paylaşım kodu'});
-    const response = await fetch(STORE + '/' + id, {
-      headers: {'Accept': 'application/json'}, signal: AbortSignal.timeout(15000)
+    const raw = String(req.query && req.query.id || '');
+    const prefix = /^([sj])-/.exec(raw);
+    const id = prefix ? raw.slice(2) : raw;
+    if (!VALID_ID.test(id)) return send(res, 400, {error: 'Geçersiz paylaşım kodu'});
+    // Unprefixed ids are legacy links and used the old jsonblob service.
+    const stores = prefix ? STORES.filter(s => s.key === prefix[1]) : [STORES[1], STORES[0]];
+    let lastError = null;
+    for (const store of stores) {
+      try {
+        const result = await readFromStore(store, id);
+        if (result.data) return send(res, 200, result.data);
+      } catch (error) { lastError = error; }
+    }
+    return send(res, lastError ? 502 : 404, {
+      error: lastError ? 'Paylaşım servisine ulaşılamadı: ' + lastError.message : 'Paylaşım bulunamadı'
     });
-    if (response.status === 404) return send(res, 404, {error: 'Paylaşım bulunamadı'});
-    if (!response.ok) return send(res, 502, {error: 'Paylaşım okunamadı'});
-    const body = await response.text();
-    if (Buffer.byteLength(body, 'utf8') > MAX_BODY) return send(res, 413, {error: 'Paylaşım boyutu çok büyük'});
-    const parsed = JSON.parse(body);
-    if (!parsed || !Array.isArray(parsed.items)) return send(res, 502, {error: 'Paylaşım verisi bozuk'});
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120');
-    return send(res, 200, parsed);
-  } catch (err) {
-    return send(res, 502, {error: 'Paylaşım servisine bağlanılamadı'});
+  } catch (error) {
+    return send(res, 502, {error: 'Paylaşım sunucusu hatası: ' + (error && error.message || 'bilinmeyen hata').slice(0, 150)});
   }
 };

@@ -2,6 +2,7 @@
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Parsel Görüntüleyici</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}html,body{height:100%;margin:0}body{font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#17212b;display:flex;flex-direction:column}
 header{background:#1c4587;color:#fff;padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -11,6 +12,10 @@ header .t{flex:1;min-width:160px}header b{font-size:16px}header small{display:bl
 select,button{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid #9db0d0;background:#fff;color:#17212b}
 button{cursor:pointer}
 main{flex:1;display:flex;min-height:0;position:relative}
+#loadStatus{padding:10px 14px;font-size:13px;background:#eef4ff;color:#173e74}
+#loadStatus[hidden]{display:none!important}
+#loadStatus.error{background:#ffeded;color:#9a2424}
+#loadStatus a{color:inherit;font-weight:700;text-decoration:underline}
 #list{width:270px;overflow:auto;border-right:1px solid #d6dde8;background:#f6f8fb}
 #list h2{margin:0;padding:8px 10px;font-size:13px;color:#4a5b73;position:sticky;top:0;background:#f6f8fb}
 .it{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid #e5eaf1;cursor:pointer}
@@ -26,12 +31,35 @@ footer{font-size:11px;color:#5a6a80;padding:4px 10px;background:#f6f8fb;border-t
 <header><div id="logo"></div><div class="t"><b id="firm"></b><small id="who"></small></div>
 <div class="bar"><select id="bm"><option value="sat">Uydu</option><option value="street">Harita</option><option value="osm">OSM</option></select><button id="loc" type="button">Konumum</button></div></header>
 <main><div id="list"><h2 id="lh"></h2></div><div id="map"></div></main>
+<div id="loadStatus" role="status" aria-live="polite">Parsel haritası açılıyor…</div>
 <footer id="foot"></footer>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" onerror="this.onerror=null;this.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'"></script>
 <script>
 var D = /*DATA*/null;
+function statusMessage(t, error){
+  var s = document.getElementById('loadStatus');
+  if (!s) return;
+  s.textContent = t; s.hidden = false; s.className = error ? 'error' : '';
+}
+function failScreen(e){
+  var msg = e && e.message ? e.message : 'Bilinmeyen hata';
+  statusMessage('Harita açılamadı: ' + msg, true);
+  var map = document.getElementById('map');
+  if (map) {
+    map.innerHTML = '';
+    var p = document.createElement('p'); p.style.cssText = 'margin:16px;font-size:14px;line-height:1.5';
+    p.textContent = 'Bağlantıyı Chrome tarayıcısında açmayı deneyin. Hata: ' + msg;
+    map.appendChild(p);
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = 'Tekrar dene'; btn.style.margin = '0 16px';
+    btn.onclick = function(){ location.reload(); };
+    map.appendChild(btn);
+  }
+}
+
 function esc(t){return String(t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function main(){
+statusMessage('Parseller haritaya yerleştiriliyor…');
 function dec(a){ if (typeof a[0] === 'number') { var o = [], x = 0, y = 0; for (var i = 0; i < a.length; i += 2) { x += a[i]; y += a[i + 1]; o.push([x / 1e5, y / 1e5]); } return o; } return a.map(dec); }
 D.items.forEach(function(it){ if (it.e) it.g = {type: it.g.type, coordinates: dec(it.g.coordinates)}; });
 document.title = D.title || 'Parsel Görüntüleyici';
@@ -41,7 +69,7 @@ document.getElementById('firm').textContent = B.firm || D.title || 'Parsel Harit
 document.getElementById('who').textContent = [B.agent, B.phone, B.mail].filter(Boolean).join(' · ');
 document.getElementById('foot').textContent = (B.note ? B.note + ' — ' : '') + 'Bu görüntü bilgilendirme amaçlıdır; resmi işlemlerde tapu/kadastro kayıtları esastır. ' + (D.date || '');
 document.getElementById('lh').textContent = D.items.length + ' parsel';
-if (typeof L === 'undefined') { document.getElementById('map').innerHTML = '<p style="padding:20px">Harita yüklenemedi. İnternet bağlantınızı kontrol edip sayfayı yenileyin.</p>'; throw new Error('Leaflet yok'); }
+if (typeof L === 'undefined') { throw new Error('Harita kütüphanesi yüklenemedi. Mobil tarayıcıda CDN bağlantısı engellenmiş olabilir.'); }
 var ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 var BM = {
   sat: [L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom: 19, maxZoom: 21, attribution: 'Esri, Maxar'}), L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxNativeZoom: 19, maxZoom: 21})],
@@ -95,7 +123,14 @@ D.items.forEach(function(it, i){
 function syncLab(){ document.getElementById('map').classList.toggle('hl', map.getZoom() < 15); var d = map.getZoom() < 15 ? 'none' : ''; document.querySelectorAll('.lab').forEach(function(e){ e.style.display = d; }); }
 map.on('zoomend', syncLab);
 if (group.getLayers().length) map.fitBounds(group.getBounds(), {padding: [30, 30]}); else map.setView([39, 35], 6);
-map.whenReady(function(){syncLab();setTimeout(function(){map.invalidateSize();if(group.getLayers().length)map.fitBounds(group.getBounds(),{padding:[30,30]});},150);});
+map.whenReady(function(){
+  syncLab();
+  setTimeout(function(){
+    map.invalidateSize();
+    if(group.getLayers().length)map.fitBounds(group.getBounds(),{padding:[30,30]});
+    var st = document.getElementById('loadStatus'); if (st) st.hidden = true;
+  },150);
+});
 window.addEventListener('orientationchange',function(){setTimeout(function(){map.invalidateSize();},300);});
 var me = null;
 document.getElementById('loc').addEventListener('click', function(){
@@ -109,21 +144,36 @@ document.getElementById('loc').addEventListener('click', function(){
 
 }
 async function sharedData(id){
-  // New links load from the same website, avoiding Safari cross-origin restrictions.
-  var urls = ['/api/share?id=' + encodeURIComponent(id)];
-  // Keep old links from GitHub Pages working through the new sharing service.
-  if (/github\.io$/i.test(location.hostname)) urls.push('https://toplu-parsel-sorgu-tdqp.vercel.app/api/share?id=' + encodeURIComponent(id));
-  var lastError = new Error('Paylaşım servisine ulaşılamadı');
+  var hosts = [];
+  // On GitHub Pages, the viewer is public and the data service lives at Vercel.
+  if (!/github\\.io$/i.test(location.hostname)) hosts.push(location.origin);
+  hosts.push('https://toplu-parsel-sorgu-tdqp.vercel.app');
+  hosts.push('https://toplu-parsel-sorgu.vercel.app');
+  var urls = [];
+  hosts.forEach(function(host){
+    var u = host + '/api/share?id=' + encodeURIComponent(id);
+    if (urls.indexOf(u) < 0) urls.push(u);
+  });
+  // Fallback for Android browsers if one of the deployment domains is blocked.
+  var prefix = /^([sj])-/.exec(id), cleanId = prefix ? id.slice(2) : id;
+  if (!prefix || prefix[1] === 's') urls.push('https://superjsonblob.com/api/jsonBlob/' + encodeURIComponent(cleanId));
+  if (!prefix || prefix[1] === 'j') urls.push('https://jsonblob.com/api/jsonBlob/' + encodeURIComponent(cleanId));
+  var lastError = new Error('Paylaşım verisine erişilemiyor');
   for (var n = 0; n < urls.length; n++) {
+    statusMessage('Parsel verileri yükleniyor (' + (n + 1) + '/' + urls.length + ')…');
     try {
-      var response = await fetch(urls[n], {headers: {'Accept': 'application/json'}, cache: 'no-store'});
-      if (!response.ok) throw new Error('Paylaşım HTTP ' + response.status);
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 9000);
+      var response;
+      try { response = await fetch(urls[n], {headers: {'Accept': 'application/json'}, cache: 'no-store', signal: ctrl.signal}); }
+      finally { clearTimeout(timer); }
+      if (!response.ok) throw new Error('Veri sunucusu HTTP ' + response.status);
       var data = await response.json();
-      if (!data || !Array.isArray(data.items)) throw new Error('Paylaşım verisi geçersiz');
+      if (!data || !Array.isArray(data.items) || !data.items.length) throw new Error('Parsel verisi eksik');
       return data;
     } catch (e) { lastError = e; }
   }
-  throw lastError;
+  throw new Error('Paylaşım verisi alınamadı (' + lastError.message + ').');
 }
 (async function(){
   try {
@@ -144,8 +194,6 @@ async function sharedData(id){
     }
     if (!D || !Array.isArray(D.items)) throw new Error('Parsel verisi geçersiz');
     main();
-  } catch (e) {
-    document.body.innerHTML = '<div style="padding:28px;font:16px/1.5 system-ui"><b>Harita bağlantısı açılamadı.</b><p>Bağlantı geçici olarak erişilemiyor veya eksik olabilir. İnternetinizi kontrol edip yeniden deneyin; sorun sürerse gönderen kişiden yeni bağlantı isteyin.</p><button type="button" onclick="location.reload()" style="padding:10px 16px">Tekrar dene</button></div>';
-  }
+  } catch (e) { failScreen(e); }
 })();
 </script></body></html>

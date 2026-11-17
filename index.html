@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.23</summary>
+        <summary>Ayarlar · sürüm 12.24</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1963,7 +1963,7 @@ function poleOf(g){
   // The public viewer and its API must use one origin for iPhone Safari.
   // Standalone public viewer. Data travels inside the link's fragment,
   // eliminating Android cross-origin share-data requests entirely.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261117d';
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118a';
   async function shortLink(){
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
@@ -1984,7 +1984,8 @@ function poleOf(g){
     var binary = '';
     for (var i = 0; i < bytes.length; i += 8192)
       binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-    var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    /* WhatsApp _ * ~ işaretlerini biçim sayıp linki bozar: yalnız harf, rakam, nokta */
+    var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
     var url = VIEW_URL + '#g=' + kind + token;
     // Long WhatsApp links are often broken or cut off in mobile messengers.
     // Reject instead of handing the customer a link that looks valid but fails.

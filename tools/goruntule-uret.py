@@ -8,7 +8,7 @@ tpl = s[a:s.index('</script>', a)]
 boot = r'''(async function(){
   try {
     var h = location.hash.replace(/^#g=/, ''); if (!h) throw 0;
-    var k = h[0], bin = atob(h.slice(1).replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
+    var k = h[0], bin = atob(h.slice(1).replace(/\.a/g, '+').replace(/\.b/g, '/').replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
     if (k === 'z') u = new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
     D = JSON.parse(new TextDecoder().decode(u));

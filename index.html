@@ -393,7 +393,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <div id="priceTot" style="margin-top:6px"></div>
       </div>
     </section>
-    <section id="secView" data-step="2">
+    <section id="secView" data-step="1 2">
       <h2>Görünüm</h2>
       <div class="row">
         <label class="f grow">Altlık
@@ -403,7 +403,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
             <option value="hybrid">Uydu ve yer adları</option>
             <option value="osm">OpenStreetMap</option>
             <option value="mb-sat">Mapbox uydu</option>
-            <option value="mb-hybrid">Mapbox uydu + yol/yer adları</option>
+            <option value="mb-hybrid" selected>Mapbox uydu + yol/yer adları</option>
             <option value="mb-street">Mapbox sokak haritası</option>
           </select>
         </label>
@@ -581,7 +581,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.31</summary>
+        <summary>Ayarlar · sürüm 12.32</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -3297,7 +3297,10 @@ function poleOf(g){
       if (s.list != null) $('list').value = s.list;
       if (s.defIl != null) $('defIl').value = s.defIl;
       if (s.defIlce != null) $('defIlce').value = s.defIlce;
-      if (s.base) $('base').value = s.base;
+      /* varsayılan altlık: Mapbox uydu + yol/yer adları (eski kayıtlı seçim bir kez bununla değiştirilir) */
+      var bk = 'parsel-harita-base-v2', bdone = null; try { bdone = localStorage.getItem(bk); } catch (e) {}
+      if (!bdone) { $('base').value = 'mb-hybrid'; try { localStorage.setItem(bk, '1'); } catch (e) {} }
+      else if (s.base) $('base').value = s.base;
       if (s.hatchStyle) $('hatchStyle').value = s.hatchStyle;
       if (s.hatchColor && s.cv === 2) $('hatchColor').value = s.hatchColor;
       if (s.labels != null) $('showLabels').checked = !!s.labels;

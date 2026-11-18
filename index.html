@@ -536,7 +536,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
       <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
-        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.28 · 120 parsel için sıkıştırılmış paylaşım. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.29 · 120 parsel için yeni paylaşım sunucusu. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
         <div id="shareReady" hidden style="margin-top:9px">
           <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
           <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.28</summary>
+        <summary>Ayarlar · sürüm 12.29</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2014,32 +2014,32 @@ function poleOf(g){
     // Larger maps need short public links. Server validates that the rendered
     // map is ready, not just that the record has been stored.
     var packed = await packedShareData(data);
-    var content = JSON.stringify(packed), hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
-    if (content.length > 1600000) throw new Error('120 parselin verisi sunucu sınırını aşıyor. Daha küçük parsel gruplarıyla deneyin.');
-    var custom = base();
-    if (custom && hosts.indexOf(custom) === -1 && /^https:\/\//.test(custom)) hosts.push(custom);
-    var errors = [];
-    for (var n = 0; n < hosts.length; n++) {
-      var host = hosts[n], ctrl = new AbortController(), timeout = setTimeout(function(){ ctrl.abort(); }, 25000);
-      shareMessage(data.items.length + ' parsel için kısa link sunucusu kontrol ediliyor (' + (n + 1) + '/' + hosts.length + ')…');
-      try {
-        var response = await fetch(host + '/api/share', {
-          method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json'},
-          body: content, signal: ctrl.signal
-        });
-        var stored = await response.json().catch(function(){ return {}; });
-        if (!response.ok || !stored.id || !/^[A-Za-z0-9-]{8,102}$/.test(stored.id))
-          throw new Error(stored.error || ('HTTP ' + response.status));
-        var url = host + '/api/view?id=' + encodeURIComponent(stored.id);
-        var verify = await fetch(url, {cache:'no-store',signal:ctrl.signal});
-        if (!verify.ok || (verify.headers.get('x-parsel-viewer') || '') !== 'ready')
-          throw new Error('Harita önizleme servisi hazır değil');
-        return url;
-      } catch(e) { errors.push((host.split('/')[2] || host) + ': ' + (e.message || e)); }
-      finally { clearTimeout(timeout); }
+    var content = JSON.stringify(packed);
+    if (content.length > 1200000) throw new Error('Bu parsel listesinin sıkıştırılmış verisi 1,2 MB sınırını aşıyor.');
+    // Bulk shares are stored independently of Vercel, in a private Supabase
+    // table. Customers receive a single public-by-link HTML map page.
+    var endpoint = 'https://tffvwxskvjuxoekwgdef.supabase.co/functions/v1/parsel-public-share';
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 30000);
+    shareMessage(data.items.length + ' parsel için tek müşteri bağlantısı hazırlanıyor…');
+    try {
+      var response = await fetch(endpoint, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:content,signal:controller.signal
+      });
+      var result = await response.json().catch(function(){ return {}; });
+      if (!response.ok) throw new Error(result.error || ('Paylaşım sunucusu HTTP ' + response.status));
+      if (!result.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.id))
+        throw new Error('Müşteri bağlantısının kodu alınamadı');
+      return endpoint + '?id=' + encodeURIComponent(result.id);
+    } catch(e) {
+      if (e && e.name === 'AbortError') throw new Error('Parsel paylaşım sunucusu zaman aşımına uğradı.');
+      if (e instanceof TypeError) throw new Error('Parsel paylaşım sunucusuna tarayıcıdan ulaşılamıyor (Failed to fetch).');
+      throw e;
+    } finally {
+      clearTimeout(timeout);
     }
-    throw new Error('Sıkıştırılmış paylaşım sunucusuna ulaşılamadı. ' +
-      'Sunucu hataları: ' + errors.join(' | ').slice(0,230) + '. HTML dosyası indirme çalışmaya devam eder.');
   }
   var shareBusy = false, shareUrl = '';
   function shareMessage(message, error) {

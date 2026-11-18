@@ -1,3 +1,4 @@
+const {unpack, validData} = require('./_share_format');
 // A single HTML response carries the complete parcel map to the customer's browser.
 // No cross-origin browser fetch: the server reads saved parcel data and embeds it.
 // Links are public to anyone who knows the unguessable identifier.
@@ -21,9 +22,8 @@ async function readStore(store, id){
   if(!response.ok)throw Error('Parsel kayıt servisi HTTP '+response.status);
   const body=await response.text();
   if(Buffer.byteLength(body,'utf8')>LIMIT)throw Error('Paylaşım dosyası çok büyük');
-  const data=JSON.parse(body);
-  if(!data||!Array.isArray(data.items)||!data.items.length||
-    !data.items.every(it=>it&&it.g&&['Polygon','MultiPolygon'].includes(it.g.type)))throw Error('Parsel verisi geçersiz');
+  const data=unpack(JSON.parse(body));
+  if(!validData(data))throw Error('Parsel verisi geçersiz');
   return data;
 }
 module.exports=async function(req,res){

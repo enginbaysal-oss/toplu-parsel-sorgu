@@ -306,6 +306,21 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
   .cmode{display:flex;flex-wrap:wrap;gap:4px 12px;margin:4px 0 6px;font-size:14px}
   .cmode label{display:flex;align-items:center;gap:4px;cursor:pointer}
   .pcs-t{margin-top:10px;font-size:13px;font-weight:600}
+
+.steps{display:flex;gap:6px;position:sticky;top:0;z-index:6;background:var(--zone);padding:10px 0 6px;margin:0 -2px}
+.steps button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;font-size:12px;line-height:1.15;text-align:center}
+.steps button i{font-style:normal;font-weight:700;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--zone);border:1px solid var(--btn-bd);font-size:12px}
+.steps button.on{outline:2px solid var(--accent);color:var(--accent);font-weight:700}
+.steps button.on i{background:var(--accent);color:#fff;border-color:var(--accent)}
+.steps button:disabled{opacity:.45}
+.modebar{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px;text-align:left}
+.card b{font-size:15px}.card span{font-size:12px;color:var(--muted);font-weight:400}
+.card.on{outline:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--btn-top))}
+.stepnav{display:flex;gap:8px;position:sticky;bottom:0;z-index:6;background:var(--zone);padding:8px 0;margin-top:auto}
+.stepnav button{flex:1}
+.sh{display:none!important}
 </style>
 </head>
 <body>
@@ -326,14 +341,21 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <p class="sub">İl, ilçe, mahalle, ada ve parsel listesini yapıştırın. Parseller harita veya uydu görüntüsü üzerinde taralı alan olarak çizilir.</p>
     </header>
 
-    <section>
-      <div class="sec-h"><h2>Parsel listesi</h2></div>
-      <div class="row">
+    <nav class="steps" id="steps" aria-label="Adımlar">
+      <button type="button" data-go="1"><i>1</i><span>Parsel ekle</span></button>
+      <button type="button" data-go="2"><i>2</i><span>İncele</span></button>
+      <button type="button" data-go="3"><i>3</i><span>Renk ve fiyat</span></button>
+      <button type="button" data-go="4"><i>4</i><span>Gönder</span></button>
+    </nav>
+    <div class="modebar"><label class="check"><input type="checkbox" id="advMode"> Gelişmiş ayarlar</label><label class="check"><input type="checkbox" id="classicMode"> Klasik görünüm (eski)</label></div>
+    <section id="secList" data-step="1 3">
+      <div class="sec-h" data-step="1"><h2>Parsel listesi</h2></div>
+      <div data-step="1" class="row">
         <label class="f grow">Varsayılan il<input type="text" id="defIl" placeholder="Listede il yoksa"></label>
         <label class="f grow">Varsayılan ilçe<input type="text" id="defIlce" placeholder="Listede ilçe yoksa"></label>
       </div>
-      <textarea id="list" rows="3" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
-      <div class="row">
+      <textarea data-step="1" id="list" rows="3" spellcheck="false" placeholder="İl&#9;İlçe&#9;Mahalle&#9;Ada&#9;Parsel&#10;Manisa&#9;Salihli&#9;Adnan Menderes&#9;101&#9;12"></textarea>
+      <div data-step="1" class="row">
         <label class="f grow">Dosyadan yükle
           <select id="upType"><option value="backup">Yedek (geojson/json)</option><option value="photo">Fotoğraf</option><option value="excel">Excel / CSV</option></select>
         </label>
@@ -344,25 +366,25 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <input type="file" id="filePhoto" accept="image/*" hidden>
       <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv,.ods,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <input type="file" id="fileImport" hidden>
-      <p class="hint">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>; ayırıcı sekme, ; veya , olabilir. <code>Mahalle 101/12</code> yazımı da kabul edilir.</p>
-      <div class="row">
+      <p class="hint" data-step="1">Sütun sırası <code>İl, İlçe, Mahalle, Ada, Parsel</code>; ayırıcı sekme, ; veya , olabilir. <code>Mahalle 101/12</code> yazımı da kabul edilir.</p>
+      <div data-step="1" class="row">
         <button class="primary grow" id="btnRun" type="button">Sorgula ve haritada göster</button>
         <button id="btnStop" type="button" disabled>Durdur</button>
         <button class="danger" id="btnClear" type="button">Temizle</button>
       </div>
-      <div class="row">
+      <div data-step="1" class="row">
         <button id="btnRetry" type="button" disabled title="Hata veren ve bulunamayan parselleri yeniden sorgula">Hatalıları yeniden dene</button>
         <button id="btnAddToggle" type="button" aria-expanded="false">+ Parsel ekle</button>
       </div>
-      <div class="addrow" id="addPanel" hidden>
+      <div class="addrow" id="addPanel" hidden data-step="1">
         <label class="f">Yeni parsel(ler), her satıra bir tane<textarea id="addText" rows="2" spellcheck="false" placeholder="Mahalle 122 14&#10;ya da: İl İlçe Mahalle Ada Parsel"></textarea></label>
         <button type="button" id="btnAddRows">Ekle ve sorgula</button>
         <p class="hint">Listeye eklenir, mevcut parseller silinmez. İl ve ilçe boşsa yukarıdaki varsayılan il/ilçe kullanılır.</p>
       </div>
-      <div class="progress" aria-hidden="true"><i id="bar"></i></div>
-      <div class="counts" id="counts"></div>
-      <p class="notice" id="notice" hidden></p>
-      <div class="pricesum" id="priceSum">
+      <div data-step="1" class="progress" aria-hidden="true"><i id="bar"></i></div>
+      <div data-step="1" class="counts" id="counts"></div>
+      <p class="notice" id="notice" hidden data-step="1 2 3 4"></p>
+      <div class="pricesum" id="priceSum" data-step="3">
         <div class="row">
           <label class="f grow">Toplu m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
           <button type="button" id="btnBulkPrice" class="ghost" title="İşaretli parsellere, işaret yoksa tümüne uygular">Uygula</button>
@@ -371,18 +393,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <div id="priceTot" style="margin-top:6px"></div>
       </div>
     </section>
-
-    <section>
-      <h2>Arşiv</h2>
-      <div class="row">
-        <label class="f grow">Kayıt adı<input type="text" id="arcName" maxlength="80" placeholder="Örn. Ahmet Bey – Soma 196 ada" autocomplete="off"></label>
-        <button type="button" id="btnArcSave" disabled>Arşive kaydet</button>
-      </div>
-      <div id="arcList" class="arclist"></div>
-      <p class="hint">Kayıtlar bu cihazda saklanır. <b>Paylaş</b> ile WhatsApp, e-posta gibi uygulamalarla gönderebilirsiniz; alan cihazda "Dosyadan yükle → Yedek" ile açılır.</p>
-    </section>
-
-    <section>
+    <section id="secView" data-step="2">
       <h2>Görünüm</h2>
       <div class="row">
         <label class="f grow">Altlık
@@ -419,8 +430,83 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </div>
       <label class="check"><input type="checkbox" id="showLabels" checked> Parsel üzerinde ada/parsel etiketi</label>
     </section>
-
-    <section>
+    <section id="secRes" data-step="2 3">
+      <div class="sec-h" data-step="2 3"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
+      <div class="rowtools" id="rowTools" data-step="2 3">
+        <span class="rt-l">Tümü</span>
+        <button type="button" id="btnShowAll">Tümünü göster</button>
+        <button type="button" id="btnHideAll">Tümünü gizle</button>
+      </div>
+      <div class="rowtools" data-step="2 3">
+        <span class="rt-l">Seçili</span>
+        <button type="button" id="btnShowSel">Göster</button>
+        <button type="button" id="btnHideSel">Gizle</button>
+        <button type="button" id="btnDelSel" class="danger">Sil</button>
+      </div>
+      <div class="tablewrap" data-step="2 3">
+        <table>
+          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th class="num">₺/m²</th><th class="num">Toplam fiyat</th><th>Not</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
+      </div>
+      <div class="colorsum" id="colorSum" hidden data-step="3"></div>
+      <div class="colorbox" data-step="3">
+        <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
+        <div class="swatches" id="swatches">
+          <button class="s" type="button" data-c="#e0301e" style="background:#e0301e" aria-label="Kırmızı"></button>
+          <button class="s" type="button" data-c="#f08a00" style="background:#f08a00" aria-label="Turuncu"></button>
+          <button class="s" type="button" data-c="#f2d600" style="background:#f2d600" aria-label="Sarı"></button>
+          <button class="s" type="button" data-c="#1fa34a" style="background:#1fa34a" aria-label="Yeşil"></button>
+          <button class="s" type="button" data-c="#12b5cb" style="background:#12b5cb" aria-label="Turkuaz"></button>
+          <button class="s" type="button" data-c="#2c5fe0" style="background:#2c5fe0" aria-label="Mavi"></button>
+          <button class="s" type="button" data-c="#8a3ffc" style="background:#8a3ffc" aria-label="Mor"></button>
+          <button class="s" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="Beyaz"></button>
+          <button class="s" type="button" data-c="#000000" style="background:#000000" aria-label="Siyah"></button>
+          <input type="color" id="selColor" value="#e0301e" aria-label="Özel renk seç">
+        </div>
+        <div class="row">
+          <button id="btnApplyColor" type="button">Seçiliye uygula</button>
+          <button class="ghost" id="btnResetColor" type="button">Varsayılan renge dön</button>
+        </div>
+        <label class="f adv">Dolgu deseni (işaretli/seçili parsellere)
+          <select id="selHatch"></select>
+        </label>
+      </div>
+    </section>
+    <section id="secSend" data-step="4">
+      <h2>Nasıl göndermek istersiniz?</h2>
+      <div class="cards" id="sendCards">
+        <button type="button" class="card" data-pick="link"><b>Link</b><span>Müşteri telefonunda açar</span></button>
+        <button type="button" class="card" data-pick="pdf"><b>PDF / Resim</b><span>Harita ve liste</span></button>
+        <button type="button" class="card" data-pick="xlsx"><b>Excel</b><span>Parsel listesi</span></button>
+        <button type="button" class="card" data-pick="offer"><b>Teklif</b><span>Teklif PDF'i</span></button>
+        <button type="button" class="card" data-pick="backup"><b>Yedek</b><span>Dosya olarak sakla</span></button>
+      </div>
+    </section>
+    <section id="secLink" data-step="4" data-send="link backup">
+      <h2>Gönderim</h2>
+      <div class="row">
+        <label class="f grow">Yedekle / dışa aktar
+          <select id="dlType"><option value="geo">Yedek (.geojson)</option><option value="link">Müşteriye link gönder (telefonda açılır)</option><option value="view">Dosya (.html) – bilgisayarda açılır</option><option value="kml">KML</option><option value="csv">CSV</option></select>
+        </label>
+        <button type="button" id="btnDl" disabled>İndir</button>
+      </div>
+      <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.30 · Android uyumlu müşteri haritası. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
+        <div id="shareReady" hidden style="margin-top:9px">
+          <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
+          <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
+          <div class="row" style="margin-top:10px">
+            <a id="sharePreview" class="btnlink" target="_blank" rel="noopener noreferrer" style="font-weight:700">Haritayı aç</a>
+            <a id="shareWhatsapp" class="btnlink primary" target="_blank" rel="noopener noreferrer">WhatsApp'ta gönder</a>
+            <button id="shareCopy" type="button">Linki kopyala</button>
+          </div>
+        </div>
+      </div>
+      <button id="btnGeo" type="button" hidden disabled></button><button id="btnKml" type="button" hidden disabled></button><button id="btnCsv" type="button" hidden disabled></button><button id="btnView" type="button" hidden disabled></button><button id="btnLink" type="button" hidden disabled></button>
+    </section>
+    <section id="secOffer" data-step="4" data-send="offer">
       <h2>Teklif çıktısı</h2>
       <p class="hint">Tabloda <b>işaretli</b> parseller teklif konusu olur (hiçbiri işaretli değilse görünen tümü).</p>
       <div class="row">
@@ -441,18 +527,17 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <div id="ofInfo" class="hint"></div>
       <button class="cta" id="btnOffer" type="button" disabled>Teklif PDF'i al</button>
     </section>
-
-    <section>
+    <section id="secOut" data-step="4" data-send="out">
       <h2>Müşteri çıktısı</h2>
       <label class="f">Başlık<input type="text" id="outTitle" value="Parsel Haritası"></label>
       <div class="row">
         <label class="f grow">Biçim
           <select id="outFmt"><option value="pdf">PDF</option><option value="jpg">JPEG (harita)</option><option value="xlsx">Excel (liste)</option></select>
         </label>
-        <label class="f grow">Kalite
+        <label class="f grow adv">Kalite
           <select id="outQ"><option value="5000000">Normal</option><option value="10000000" selected>Yüksek</option><option value="20000000">Çok yüksek</option></select>
         </label>
-        <label class="f grow">Sayfa
+        <label class="f grow adv">Sayfa
           <select id="outPage"><option value="a3" selected>A3</option><option value="a4">A4</option></select>
         </label>
       </div>
@@ -463,7 +548,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <label class="check"><input type="checkbox" id="outPrice"> m² fiyatı ve toplam fiyatı göster</label>
         <label class="check"><input type="checkbox" id="outMiss" checked> Bulunamayan parselleri de ekle</label>
       </details>
-      <details class="optdd" id="brandBox">
+      <details class="optdd adv" id="brandBox">
         <summary id="brandSum">Kurumsal bilgiler (çıktıya basılır)</summary>
         <div class="brandf">
           <label class="f">Firma / ofis adı<input type="text" id="brFirm" maxlength="60" autocomplete="off"></label>
@@ -485,74 +570,18 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <button class="cta" id="btnExport" type="button">Çıktı al</button>
       <p class="hint">Altlık olarak ekrandaki harita seçimi kullanılır.</p>
     </section>
-
-    <section>
-      <div class="sec-h"><h2>Sonuçlar</h2><button class="ghost" id="btnFit" type="button">Tümüne yakınlaş</button></div>
-      <div class="rowtools" id="rowTools">
-        <span class="rt-l">Tümü</span>
-        <button type="button" id="btnShowAll">Tümünü göster</button>
-        <button type="button" id="btnHideAll">Tümünü gizle</button>
-      </div>
-      <div class="rowtools">
-        <span class="rt-l">Seçili</span>
-        <button type="button" id="btnShowSel">Göster</button>
-        <button type="button" id="btnHideSel">Gizle</button>
-        <button type="button" id="btnDelSel" class="danger">Sil</button>
-      </div>
-      <div class="tablewrap">
-        <table>
-          <thead><tr><th class="acts"></th><th><input type="checkbox" id="chkAll" aria-label="Tümünü seç"></th><th>#</th><th>Mahalle</th><th>Ada/Parsel</th><th>Durum</th><th class="num">Alan</th><th class="num">₺/m²</th><th class="num">Toplam fiyat</th><th>Not</th></tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
-        <div class="empty" id="empty">Henüz sorgu yok. Listeyi yapıştırıp Sorgula düğmesine basın.</div>
-      </div>
-      <div class="colorsum" id="colorSum" hidden></div>
-      <div class="colorbox">
-        <div class="info" id="selInfo">Renk vermek için tabloda parselleri işaretleyin.</div>
-        <div class="swatches" id="swatches">
-          <button class="s" type="button" data-c="#e0301e" style="background:#e0301e" aria-label="Kırmızı"></button>
-          <button class="s" type="button" data-c="#f08a00" style="background:#f08a00" aria-label="Turuncu"></button>
-          <button class="s" type="button" data-c="#f2d600" style="background:#f2d600" aria-label="Sarı"></button>
-          <button class="s" type="button" data-c="#1fa34a" style="background:#1fa34a" aria-label="Yeşil"></button>
-          <button class="s" type="button" data-c="#12b5cb" style="background:#12b5cb" aria-label="Turkuaz"></button>
-          <button class="s" type="button" data-c="#2c5fe0" style="background:#2c5fe0" aria-label="Mavi"></button>
-          <button class="s" type="button" data-c="#8a3ffc" style="background:#8a3ffc" aria-label="Mor"></button>
-          <button class="s" type="button" data-c="#ffffff" style="background:#ffffff" aria-label="Beyaz"></button>
-          <button class="s" type="button" data-c="#000000" style="background:#000000" aria-label="Siyah"></button>
-          <input type="color" id="selColor" value="#e0301e" aria-label="Özel renk seç">
-        </div>
-        <div class="row">
-          <button id="btnApplyColor" type="button">Seçiliye uygula</button>
-          <button class="ghost" id="btnResetColor" type="button">Varsayılan renge dön</button>
-        </div>
-        <label class="f">Dolgu deseni (işaretli/seçili parsellere)
-          <select id="selHatch"></select>
-        </label>
-      </div>
+    <section id="secArc" data-step="1 4">
+      <h2>Arşiv</h2>
       <div class="row">
-        <label class="f grow">Yedekle / dışa aktar
-          <select id="dlType"><option value="geo">Yedek (.geojson)</option><option value="link">Müşteriye link gönder (telefonda açılır)</option><option value="view">Dosya (.html) – bilgisayarda açılır</option><option value="kml">KML</option><option value="csv">CSV</option></select>
-        </label>
-        <button type="button" id="btnDl" disabled>İndir</button>
+        <label class="f grow">Kayıt adı<input type="text" id="arcName" maxlength="80" placeholder="Örn. Ahmet Bey – Soma 196 ada" autocomplete="off"></label>
+        <button type="button" id="btnArcSave" disabled>Arşive kaydet</button>
       </div>
-      <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
-        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.30 · Android uyumlu müşteri haritası. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
-        <div id="shareReady" hidden style="margin-top:9px">
-          <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
-          <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
-          <div class="row" style="margin-top:10px">
-            <a id="sharePreview" class="btnlink" target="_blank" rel="noopener noreferrer" style="font-weight:700">Haritayı aç</a>
-            <a id="shareWhatsapp" class="btnlink primary" target="_blank" rel="noopener noreferrer">WhatsApp'ta gönder</a>
-            <button id="shareCopy" type="button">Linki kopyala</button>
-          </div>
-        </div>
-      </div>
-      <button id="btnGeo" type="button" hidden disabled></button><button id="btnKml" type="button" hidden disabled></button><button id="btnCsv" type="button" hidden disabled></button><button id="btnView" type="button" hidden disabled></button><button id="btnLink" type="button" hidden disabled></button>
+      <div id="arcList" class="arclist"></div>
+      <p class="hint">Kayıtlar bu cihazda saklanır. <b>Paylaş</b> ile WhatsApp, e-posta gibi uygulamalarla gönderebilirsiniz; alan cihazda "Dosyadan yükle → Yedek" ile açılır.</p>
     </section>
-
-    <section>
+    <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.30</summary>
+        <summary>Ayarlar · sürüm 12.31</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -573,6 +602,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <p class="hint" style="margin-top:8px">Veriler TKGM Parsel Sorgu servisinden gelir. Sınırlar bilgi amaçlıdır, kesin sınır yerine geçmez. Tarayıcı servise erişimi engellerse kendi aracı sunucunuzun adresini buraya yazabilir veya hazır bir GeoJSON dosyasını açabilirsiniz.</p>
       </details>
     </section>
+    <div class="stepnav" id="stepNav"><button type="button" id="stepBack">← Geri</button><button type="button" id="stepNext" class="primary">Devam →</button></div>
   </aside>
   <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Menü genişliği (sürükleyin, çift tıklayınca genişler)" tabindex="0" title="Sürükleyerek menüyü genişletin · çift tıkla: geniş/dar"></div>
 
@@ -1185,6 +1215,59 @@ function poleOf(g){
     });
   })();
 
+
+  /* ---- Adımlı arayüz (Parsel ekle → İncele → Renk ve fiyat → Gönder) ---- */
+  (function(){
+    var panel = document.querySelector('aside.panel'), cur = 1, send = 'out', adv = false, classic = false, auto = false;
+    function ls(k, v){ try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; }
+    adv = ls('parsel-harita-adv-v1') === '1'; classic = ls('parsel-harita-classic-v1') === '1';
+    function has(el, attr, v){ var a = el.getAttribute(attr); return a && (' ' + a + ' ').indexOf(' ' + v + ' ') >= 0; }
+    function apply(){
+      var found = foundRows().length > 0;
+      panel.classList.toggle('classic', classic);
+      document.querySelector('#steps').classList.toggle('sh', classic);
+      document.querySelector('#stepNav').classList.toggle('sh', classic);
+      document.querySelectorAll('#steps button').forEach(function(b){ var n = +b.dataset.go; b.classList.toggle('on', n === cur); b.disabled = n > 1 && !found; });
+      panel.querySelectorAll('[data-step]').forEach(function(el){
+        var show = classic || has(el, 'data-step', cur);
+        if (show && !classic && cur === 4 && el.hasAttribute('data-send')) show = has(el, 'data-send', send);
+        el.classList.toggle('sh', !show);
+      });
+      panel.querySelectorAll('.adv').forEach(function(el){ if (!el.hasAttribute('data-step') || el.classList.contains('sh') === false) el.classList.toggle('sh', !adv && !classic ? true : false); });
+      /* adv işaretli bir bölüm (Ayarlar) gelişmiş kapalıyken gizlenir; klasikte hep görünür */
+      var secSet = document.getElementById('secSet'); if (secSet && !adv && !classic) secSet.classList.add('sh');
+      /* gönder kartları */
+      document.querySelectorAll('#sendCards .card').forEach(function(c){ c.classList.toggle('on', c.dataset.pick === send || (send === 'out' && c.dataset.pick === (document.getElementById('outFmt').value === 'xlsx' ? 'xlsx' : 'pdf')) ); });
+      var nb = document.getElementById('stepNext'), bb = document.getElementById('stepBack');
+      bb.disabled = cur === 1; nb.hidden = cur === 4;
+      nb.textContent = cur === 1 ? 'Devam: İncele →' : cur === 2 ? 'Devam: Renk ve fiyat →' : 'Devam: Gönder →';
+      nb.disabled = !found;
+    }
+    function go(n){ cur = n; apply(); panel.scrollTo ? panel.scrollTo(0, 0) : null; window.scrollTo && window.innerWidth < 900 && document.getElementById('steps').scrollIntoView({block: 'start'}); }
+    document.querySelectorAll('#steps button').forEach(function(b){ b.addEventListener('click', function(){ go(+b.dataset.go); }); });
+    document.getElementById('stepBack').addEventListener('click', function(){ go(Math.max(1, cur - 1)); });
+    document.getElementById('stepNext').addEventListener('click', function(){ go(Math.min(4, cur + 1)); });
+    document.querySelectorAll('#sendCards .card').forEach(function(c){ c.addEventListener('click', function(){
+      var k = c.dataset.pick;
+      if (k === 'pdf' || k === 'xlsx') { send = 'out'; var f = document.getElementById('outFmt'); if (k === 'xlsx') f.value = 'xlsx'; else if (f.value === 'xlsx') f.value = 'pdf'; f.dispatchEvent(new Event('change', {bubbles: true})); }
+      else if (k === 'link' || k === 'backup') { send = k; var d = document.getElementById('dlType'); d.value = k === 'link' ? 'link' : 'geo'; d.dispatchEvent(new Event('change', {bubbles: true})); }
+      else send = k;
+      apply();
+    }); });
+    var A = document.getElementById('advMode'), C = document.getElementById('classicMode');
+    A.checked = adv; C.checked = classic;
+    A.addEventListener('change', function(){ adv = A.checked; ls('parsel-harita-adv-v1', adv ? '1' : '0'); apply(); });
+    C.addEventListener('change', function(){ classic = C.checked; ls('parsel-harita-classic-v1', classic ? '1' : '0'); apply(); });
+    /* sonuç gelince otomatik "İncele" adımına geç */
+    var tmr = null;
+    new MutationObserver(function(){ clearTimeout(tmr); tmr = setTimeout(function(){
+      var n = foundRows().length;
+      if (n && !auto && cur === 1 && !classic) { auto = true; cur = 2; }
+      if (!n) auto = false;
+      apply();
+    }, 400); }).observe(document.getElementById('tbody'), {childList: true});
+    apply();
+  })();
   var instEv = null;
   window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); instEv = e; $('btnInstall').hidden = false; });
   window.addEventListener('appinstalled', function(){ instEv = null; $('btnInstall').hidden = true; });

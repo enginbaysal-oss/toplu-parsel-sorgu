@@ -1,0 +1,4 @@
+Geri dönüş noktası: sürüm 12.30 (sade arayüz çalışmasından önceki hâl)
+- Uygulama sayfası (eski hâl): yedek/index-12.30.html  ya da  parsel-1230.html
+- Telefon uygulaması (APK): yedek/parsel-haritasi-12.30.apk
+- Depoda: yedek-12.30 dalı (git checkout yedek-12.30)

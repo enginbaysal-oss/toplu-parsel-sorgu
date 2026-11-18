@@ -1,4 +1,5 @@
 // Public-by-link parcel viewer storage. Never put service secrets in the client.
+const {validData, unpack} = require('./_share_format');
 const STORES = [
   {key: 's', url: 'https://superjsonblob.com/api/jsonBlob'},
   {key: 'j', url: 'https://jsonblob.com/api/jsonBlob'}
@@ -40,13 +41,6 @@ function getId(r, body) {
   }
   return VALID_ID.test(id) ? id : null;
 }
-function validData(data) {
-  return data && typeof data === 'object' && Array.isArray(data.items) &&
-    data.items.length > 0 && data.items.length <= MAX_ITEMS &&
-    data.items.every(it => it && it.g &&
-      (it.g.type === 'Polygon' || it.g.type === 'MultiPolygon') &&
-      typeof it.ada === 'string' && typeof it.parsel === 'string');
-}
 async function saveToStore(store, body) {
   const response = await fetch(store.url, {
     method: 'POST',
@@ -69,7 +63,7 @@ async function readFromStore(store, id) {
   if (!response.ok) throw new Error(store.key + ': HTTP ' + response.status);
   const body = await response.text();
   if (Buffer.byteLength(body, 'utf8') > MAX_BODY) throw new Error('Paylaşım boyutu çok büyük');
-  const parsed = JSON.parse(body);
+  const parsed = unpack(JSON.parse(body));
   if (!validData(parsed)) throw new Error('Parsel paylaşımı geçersiz');
   return {data: parsed};
 }
@@ -83,7 +77,10 @@ module.exports = async function(req, res) {
   try {
     if (req.method === 'POST') {
       const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      if (!validData(data)) return send(res, 400, {error: 'Geçersiz parsel listesi'});
+      let expanded;
+      try { expanded = unpack(data); }
+      catch (e) { return send(res, 400, {error: e.message}); }
+      if (!validData(expanded)) return send(res, 400, {error: 'Geçersiz parsel listesi'});
       const body = JSON.stringify(data);
       if (Buffer.byteLength(body, 'utf8') > MAX_BODY) return send(res, 413, {error: 'Paylaşım boyutu çok büyük'});
       let errors = [];

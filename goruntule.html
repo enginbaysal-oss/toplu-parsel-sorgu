@@ -212,7 +212,54 @@ function scriptSharedData(id, hosts){
     });
   });
 }
+async function supabaseSharedData(id) {
+  var endpoint = 'https://tffvwxskvjuxoekwgdef.supabase.co/functions/v1/parsel-public-share';
+  statusMessage('Paylaşılan parseller yükleniyor…');
+  try {
+    var response = await fetch(endpoint + '?format=json&id=' + encodeURIComponent(id), {
+      headers: {'Accept':'application/json'}, cache:'no-store'
+    });
+    if (!response.ok) {
+      var problem = await response.json().catch(function(){return {};});
+      throw new Error(problem.error || 'Sunucu HTTP ' + response.status);
+    }
+    var data = await response.json();
+    if (!validSharedData(data)) throw new Error('Paylaşılan parsel listesi boş');
+    return data;
+  } catch (initialError) {
+    // Android browsers occasionally block cross-origin fetch. A public,
+    // read-only script payload avoids CORS without any session credentials.
+    statusMessage('Mobil paylaşım bağlantısı deneniyor…');
+    return new Promise(function(resolve, reject){
+      var finished = false;
+      var tag = document.createElement('script');
+      var oldReceiver = window.__parselShareReceive;
+      var timer = setTimeout(function(){ finish(new Error('Parsel bağlantısına ulaşılamadı: ' + initialError.message)); },12000);
+      function finish(err,data){
+        if(finished)return;
+        finished=true;
+        clearTimeout(timer);
+        tag.onload=null;tag.onerror=null;
+        if(tag.parentNode)tag.parentNode.removeChild(tag);
+        if(oldReceiver)window.__parselShareReceive=oldReceiver;
+        else try {delete window.__parselShareReceive;}catch(e){window.__parselShareReceive=null;}
+        if(err)reject(err);else resolve(data);
+      }
+      window.__parselShareReceive=function(data){
+        if(validSharedData(data)) finish(null,data);
+        else finish(new Error('Parsel verisi eksik'));
+      };
+      tag.src = endpoint + '?format=script&id=' + encodeURIComponent(id);
+      tag.async=true;
+      tag.onerror=function(){finish(new Error('Parsel verisine erişilemiyor: ' + initialError.message));};
+      tag.onload=function(){if(!finished)finish(new Error('Sunucu parsel verisini göndermedi'));};
+      document.head.appendChild(tag);
+    });
+  }
+}
 async function sharedData(id){
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+    return supabaseSharedData(id);
   /* h: linki üreten uygulamanın gerçekten çalışan sunucu adresi */
   var hp = new URLSearchParams(location.search).get('h') || '';
   var hosts = (/^https:\/\/[a-z0-9.-]+\.vercel\.app$/.test(hp) ? [hp] : []).concat(['https://toplu-parsel-sorgu-tdqp-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-git-main-engin16.vercel.app', 'https://toplu-parsel-sorgu-tdqp.vercel.app', 'https://toplu-parsel-sorgu.vercel.app']);

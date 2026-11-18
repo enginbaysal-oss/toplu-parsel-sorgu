@@ -536,7 +536,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
       <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
-        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.29 · 120 parsel için yeni paylaşım sunucusu. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.30 · Android uyumlu müşteri haritası. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
         <div id="shareReady" hidden style="margin-top:9px">
           <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
           <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.29</summary>
+        <summary>Ayarlar · sürüm 12.30</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1967,7 +1967,7 @@ function poleOf(g){
   // There is no second cross-origin fetch on Android or in the WhatsApp browser.
   // 12.27: Prefer self-contained data links. These do not contact a parcel
   // share server when a customer opens them on an Android phone.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118g';
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118h';
   async function portableLink(data) {
     var mobile = JSON.parse(JSON.stringify(data));
     if (mobile.brand) mobile.brand.logo = '';
@@ -2032,7 +2032,8 @@ function poleOf(g){
       if (!response.ok) throw new Error(result.error || ('Paylaşım sunucusu HTTP ' + response.status));
       if (!result.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.id))
         throw new Error('Müşteri bağlantısının kodu alınamadı');
-      return endpoint + '?id=' + encodeURIComponent(result.id);
+      // Open the real HTML viewer on GitHub Pages. Supabase only returns parcel data.
+      return VIEW_URL + '&id=' + encodeURIComponent(result.id);
     } catch(e) {
       if (e && e.name === 'AbortError') throw new Error('Parsel paylaşım sunucusu zaman aşımına uğradı.');
       if (e instanceof TypeError) throw new Error('Parsel paylaşım sunucusuna tarayıcıdan ulaşılamıyor (Failed to fetch).');

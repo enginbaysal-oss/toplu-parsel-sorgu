@@ -536,7 +536,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <button type="button" id="btnDl" disabled>İndir</button>
       </div>
       <div id="sharePanel" hidden style="padding:12px;border:1px solid var(--line);background:var(--panel-2);border-radius:10px">
-        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.27 · Güncel paylaşım. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
+        <div id="shareStatus" role="status" aria-live="polite" style="font-size:13px">Sürüm 12.28 · 120 parsel için sıkıştırılmış paylaşım. Önce haritada bir parsel bulun, ardından Link oluştur düğmesine basın.</div>
         <div id="shareReady" hidden style="margin-top:9px">
           <label class="f" for="shareLinkText">Müşteriye gönderilecek bağlantı</label>
           <input type="text" id="shareLinkText" readonly spellcheck="false" autocomplete="off" style="width:100%;margin-top:4px">
@@ -552,7 +552,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 
     <section>
       <details>
-        <summary>Ayarlar · sürüm 12.27</summary>
+        <summary>Ayarlar · sürüm 12.28</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1967,7 +1967,7 @@ function poleOf(g){
   // There is no second cross-origin fetch on Android or in the WhatsApp browser.
   // 12.27: Prefer self-contained data links. These do not contact a parcel
   // share server when a customer opens them on an Android phone.
-  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118f';
+  var VIEW_URL = 'https://enginbaysal-oss.github.io/toplu-parsel-sorgu/goruntule.html?v=20261118g';
   async function portableLink(data) {
     var mobile = JSON.parse(JSON.stringify(data));
     if (mobile.brand) mobile.brand.logo = '';
@@ -1986,6 +1986,25 @@ function poleOf(g){
     var token = btoa(binary).replace(/=+$/, '').replace(/\+/g, '.a').replace(/\//g, '.b');
     return VIEW_URL + '#g=' + kind + token;
   }
+  async function packedShareData(data) {
+    var json = JSON.stringify(data);
+    if (!window.CompressionStream) return data;
+    try {
+      shareMessage(data.items.length + ' parselin verileri sıkıştırılıyor…');
+      var bytes = new TextEncoder().encode(json);
+      var gz = new Uint8Array(await new Response(
+        new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
+      ).arrayBuffer());
+      if (gz.length >= bytes.length) return data;
+      var bin = '';
+      for (var p = 0; p < gz.length; p += 8192)
+        bin += String.fromCharCode.apply(null, gz.subarray(p, p + 8192));
+      return {format:'parsel-gzip-v1',payload:btoa(bin)};
+    } catch (e) {
+      // Never turn compression failure into a broken link: use normal upload.
+      return data;
+    }
+  }
   async function shortLink() {
     var data = viewerData(5);
     if (!data.items.length) throw new Error('Paylaşılacak görünür parsel yok. Önce en az bir parseli haritada gösterin.');
@@ -1994,12 +2013,15 @@ function poleOf(g){
     if (inline.length <= 3000) return inline;
     // Larger maps need short public links. Server validates that the rendered
     // map is ready, not just that the record has been stored.
-    var content = JSON.stringify(data), hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
+    var packed = await packedShareData(data);
+    var content = JSON.stringify(packed), hosts = ['https://toplu-parsel-sorgu-tdqp.vercel.app','https://toplu-parsel-sorgu.vercel.app'];
+    if (content.length > 1600000) throw new Error('120 parselin verisi sunucu sınırını aşıyor. Daha küçük parsel gruplarıyla deneyin.');
     var custom = base();
     if (custom && hosts.indexOf(custom) === -1 && /^https:\/\//.test(custom)) hosts.push(custom);
     var errors = [];
     for (var n = 0; n < hosts.length; n++) {
-      var host = hosts[n], ctrl = new AbortController(), timeout = setTimeout(function(){ ctrl.abort(); }, 13000);
+      var host = hosts[n], ctrl = new AbortController(), timeout = setTimeout(function(){ ctrl.abort(); }, 25000);
+      shareMessage(data.items.length + ' parsel için kısa link sunucusu kontrol ediliyor (' + (n + 1) + '/' + hosts.length + ')…');
       try {
         var response = await fetch(host + '/api/share', {
           method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json'},
@@ -2016,8 +2038,8 @@ function poleOf(g){
       } catch(e) { errors.push((host.split('/')[2] || host) + ': ' + (e.message || e)); }
       finally { clearTimeout(timeout); }
     }
-    throw new Error('Büyük parsel listesi için kısa link sunucusuna ulaşılamadı. ' +
-      'Daha az parsel seçin veya HTML dosyası olarak paylaşın. ' + errors.join(' | ').slice(0,180));
+    throw new Error('Sıkıştırılmış paylaşım sunucusuna ulaşılamadı. ' +
+      'Sunucu hataları: ' + errors.join(' | ').slice(0,230) + '. HTML dosyası indirme çalışmaya devam eder.');
   }
   var shareBusy = false, shareUrl = '';
   function shareMessage(message, error) {

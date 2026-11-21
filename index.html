@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.43</summary>
+        <summary>Ayarlar · sürüm 12.44</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -3308,7 +3308,7 @@ function poleOf(g){
     $(id).addEventListener('change', function(){ syncOffer(); });
   });
   try { var os = JSON.parse(localStorage.getItem(OKEY) || 'null'); if (os) Object.keys(os).forEach(function(k){ if ($(k)) $(k).value = os[k]; }); } catch (e) {}
-  function renderOfferPages(d, meta, summary, mapC){
+  function renderOfferPages(d, meta, summary){
     var PW = 1654, PH = 2339, M = 110, RH = 66, pages = [];
     var cols = d.hasAsk ?
       [{k: 'no', t: 'Sıra', w: 60}, {k: 'mah', t: 'Mahalle / konum', w: 250}, {k: 'ap', t: 'Ada / Parsel', w: 140}, {k: 'area', t: 'Yüzölçümü', w: 150}, {k: 'au', t: 'Bizim ₺/m²', w: 140}, {k: 'ou', t: 'Teklif ₺/m²', w: 140}, {k: 'at', t: 'Bizim tutar', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 190}, {k: 'df', t: 'Fark', w: 174}] :
@@ -3475,14 +3475,6 @@ function poleOf(g){
         y += RHs + 16;
       });
     }
-    // krokiyi A4 sayfaya da göm (ayrı yatay sayfa bazı görüntüleyicilerde boş görünebiliyor)
-    if (mapC && mapC.width > 0 && mapC.height > 0) {
-      if (!(summary && summary.length) || y + 420 > LIM) { P = newPage(false); x = P.x; y = 190; }
-      x.fillStyle = BRAND; x.font = F(700, 30); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('KROKİ', M, y + 20); y += 52;
-      var mw = PW - 2 * M, mh = mw * mapC.height / mapC.width, room = LIM - y;
-      if (mh > room) { mw = mw * room / mh; mh = room; }
-      x.drawImage(mapC, M + (PW - 2 * M - mw) / 2, y, mw, mh); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(M + (PW - 2 * M - mw) / 2, y, mw, mh);
-    }
     // alt bilgi
     pages.forEach(function(pg, i){
       var xx = pg.x; xx.fillStyle = '#586a72'; xx.font = F(400, 21); xx.textAlign = 'center'; xx.textBaseline = 'middle';
@@ -3522,7 +3514,7 @@ function poleOf(g){
       if (!res) throw lastErr || new Error('Kroki oluşturulamadı');
       showNotice('PDF hazırlanıyor…', true);
       await loadJsPdf();
-      var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta, multi ? sm : null, res.canvas);
+      var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta, multi ? sm : null);
       var doc = new JS({orientation: 'portrait', unit: 'mm', format: [210, 297], compress: true});
       pgs.forEach(function(c, i){ if (i) doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
       var cw = res.canvas.width, ch = res.canvas.height, long = 297, pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;

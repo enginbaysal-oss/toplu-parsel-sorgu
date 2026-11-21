@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.39</summary>
+        <summary>Ayarlar · sürüm 12.40</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1333,6 +1333,7 @@ function poleOf(g){
     }).join('') : '<div class="hint">Henüz kayıtlı teklif yok. Parselleri işaretleyip teklifi doldurun, ad verip "Teklifi kaydet"e basın.</div>';
     $('btnOfSave').disabled = !rows.some(function(r){ return r.feature; });
     $('ofAllRow').style.display = offers.length ? '' : 'none';
+    if (typeof syncOffer === 'function') try { syncOffer(); } catch (e) {}
   }
   function setOfferVisible(o, on){
     o.show = on;
@@ -3246,6 +3247,8 @@ function poleOf(g){
     return parts.join(' ');
   }
   function offerData(){
+    var sh = shownOffers();
+    if (sh.length >= 2) return offerDataMulti(sh);
     var all = foundRows(), off = all.filter(function(r){ return r.checked; });
     if (!off.length) off = all.slice();
     var others = rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; });
@@ -3263,11 +3266,32 @@ function poleOf(g){
     lines.forEach(function(l){ l.au = l.r.priceM2 || 0; l.at = l.au ? Math.round(l.a * l.au) : 0; if (l.at > 0) { askTotal += l.at; cmpOffer += l.t; askN++; } });
     return {hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 ? l.a : 0); }, 0), off: off, others: others, mode: mode, val: val, area: area, unit: unit, total: total, lines: lines, missArea: off.filter(function(r){ return !areaOf(r); }).length};
   }
+  function uniq(a){ return a.filter(function(v, i){ return a.indexOf(v) === i; }); }
+  function offerDataMulti(sh){
+    var seen = [], lines = [], total = 0, area = 0, askTotal = 0, cmpOffer = 0, askN = 0;
+    sh.forEach(function(x){
+      var rs = x.rs.filter(function(r){ return seen.indexOf(r) < 0; }); if (!rs.length) return;
+      var oa = rs.reduce(function(a, r){ return a + areaOf(r); }, 0), acc = 0, first = lines.length;
+      rs.forEach(function(r){
+        seen.push(r); var a = areaOf(r), t = 0;
+        if (x.unit > 0 && (x.o.form || {}).ofType !== 'toplam') t = Math.round(a * x.unit);
+        else if (x.total > 0 && oa) t = Math.round(x.total * a / oa);
+        acc += t; lines.push({r: r, a: a, t: t, u: a && t ? t / a : 0, who: x.o.name, color: x.color, au: 0, at: 0});
+      });
+      if (x.total > 0 && oa && lines.length > first && (x.o.form || {}).ofType === 'toplam') lines[lines.length - 1].t += x.total - acc;
+    });
+    lines.forEach(function(l){ total += l.t; area += l.a; l.au = l.r.priceM2 || 0; l.at = l.au ? Math.round(l.a * l.au) : 0; if (l.at > 0 && l.t > 0) { askTotal += l.at; cmpOffer += l.t; askN++; } });
+    var off = lines.map(function(l){ return l.r; });
+    return {multi: true, hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 && l.t > 0 ? l.a : 0); }, 0), off: off,
+      others: rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; }), mode: 'multi', val: total, area: area, unit: area ? total / area : 0, total: total, lines: lines,
+      missArea: off.filter(function(r){ return !areaOf(r); }).length, names: sh.map(function(x){ return x.from || x.o.name; }), tos: sh.map(function(x){ return x.to; }).filter(Boolean)};
+  }
   function syncOffer(){
     var d = offerData();
     $('ofValLbl').textContent = $('ofType').value === 'm2' ? 'Teklif (₺/m²)' : 'Teklif (toplam ₺)';
     $('ofInfo').textContent = d.off.length ? d.off.length + ' parsel · ' + fmtArea(d.area) + (d.total > 0 ? ' · toplam ' + fmtTL(d.total) + ' · ' + d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺/m²' : '') + (d.others.length ? ' · krokide ' + d.others.length + ' diğer parsel seçilebilir' : '') : 'Önce parselleri sorgulayın.';
     $('btnOffer').disabled = !d.off.length || !(d.val > 0);
+    if (d.multi) $('ofInfo').textContent = d.off.length + ' parsel · ' + fmtArea(d.area) + ' · ' + shownOffers().length + ' teklif açık' + (d.total > 0 ? ' · toplam ' + fmtTL(d.total) : ' · teklif tutarı girilmemiş (Tekliflerim → Kim / tutar)') + ' (üstteki kutular gerekmez)';
   }
   var OKEY = 'parsel-harita-teklif-v1';
   ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(id){
@@ -3359,7 +3383,7 @@ function poleOf(g){
       if (i % 2) { x.fillStyle = '#f5f8fb'; x.fillRect(M, y, PW - 2 * M, RH); }
       x.strokeStyle = '#e1e8ef'; x.lineWidth = 1; x.beginPath(); x.moveTo(M, y + RH); x.lineTo(PW - M, y + RH); x.stroke();
       var cx = M, dfv = l.at > 0 ? l.t - l.at : 0;
-      var vals = {no: String(i + 1), mah: r.mah, ap: r.ada + ' / ' + r.parsel, nit: prop(p, ['nitelik']), area: l.a ? fmtArea(l.a) : '—', au: fm2(l.au), ou: fm2(d.unit), at: l.at ? fmtTL(l.at) : '—', ot: l.t ? fmtTL(l.t) : '—', df: l.at > 0 ? fdiff(dfv) : '—'};
+      var vals = {no: String(i + 1), mah: r.mah, ap: r.ada + ' / ' + r.parsel, nit: prop(p, ['nitelik']), area: l.a ? fmtArea(l.a) : '—', au: fm2(l.au), ou: fm2(l.u != null ? l.u : d.unit), at: l.at ? fmtTL(l.at) : '—', ot: l.t ? fmtTL(l.t) : '—', df: l.at > 0 ? fdiff(dfv) : '—'};
       cols.forEach(function(c){
         var nm = NUM[c.k], k = c.k;
         x.fillStyle = '#15262d'; x.textAlign = nm ? 'right' : 'left'; x.textBaseline = 'middle';
@@ -3452,12 +3476,12 @@ function poleOf(g){
   $('btnOffer').addEventListener('click', async function(){
     var d = offerData();
     if (!d.off.length) { showNotice('Önce parselleri sorgulayın.'); return; }
-    if (!(d.val > 0)) { showNotice('Teklif tutarını yazın.'); return; }
+    if (!(d.val > 0)) { showNotice(d.multi ? 'Tekliflerim listesinde "Kim / tutar" ile teklif tutarlarını girin.' : 'Teklif tutarını yazın.'); return; }
     var btn = $('btnOffer'); btn.disabled = true; exporting = true; $('btnExport').disabled = true;
     var dt = new Date(), z2 = function(n){ return String(n).padStart(2, '0'); };
     var stamp = dt.getFullYear() + z2(dt.getMonth() + 1) + z2(dt.getDate()) + '-' + z2(dt.getHours()) + z2(dt.getMinutes());
     var days = parseInt($('ofDays').value, 10) || 0, vd = new Date(dt.getTime() + days * 86400000);
-    var meta = {no: 'TKL-' + z2(dt.getDate()) + z2(dt.getMonth() + 1) + dt.getFullYear() + '-' + z2(dt.getHours()) + z2(dt.getMinutes()), date: dt.toLocaleDateString('tr-TR'), to: $('ofTo').value.trim(), from: $('ofFrom').value.trim(), terms: $('ofTerms').value.trim(),
+    var meta = {no: 'TKL-' + z2(dt.getDate()) + z2(dt.getMonth() + 1) + dt.getFullYear() + '-' + z2(dt.getHours()) + z2(dt.getMinutes()), date: dt.toLocaleDateString('tr-TR'), to: $('ofTo').value.trim() || (d.multi ? uniq(d.tos).join(', ') : ''), from: $('ofFrom').value.trim() || (d.multi ? uniq(d.names).join(', ') : ''), terms: $('ofTerms').value.trim(),
       valid: days > 0 ? vd.toLocaleDateString('tr-TR') + ' tarihine kadar' : ''};
     var res = null;
     try {

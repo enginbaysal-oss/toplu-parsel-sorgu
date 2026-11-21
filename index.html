@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.40</summary>
+        <summary>Ayarlar · sürüm 12.41</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1372,8 +1372,13 @@ function poleOf(g){
     if (e.target.classList.contains('of-info')) {
       var f = o.form = o.form || {};
       var who = prompt('Bu teklifi kim veriyor? (isim)', f.ofFrom || ''); if (who === null) return;
-      var pr = prompt('Teklif edilen ₺/m² (boş bırakılabilir):', f.ofType === 'm2' || !f.ofType ? (f.ofVal || '') : ''); if (pr === null) return;
-      f.ofFrom = who.trim(); if (pr.trim()) { f.ofType = 'm2'; f.ofVal = pr.trim(); } else if (f.ofType === 'm2') f.ofVal = '';
+      var tp = prompt('"' + o.name + '" için TOPLAM teklif tutarı (₺).\nBirim fiyat (₺/m²) girecekseniz boş bırakın:', f.ofType === 'toplam' ? (f.ofVal || '') : ''); if (tp === null) return;
+      f.ofFrom = who.trim();
+      if (tp.trim()) { f.ofType = 'toplam'; f.ofVal = tp.trim(); }
+      else {
+        var pr = prompt('Teklif edilen ₺/m² (boş bırakılabilir):', f.ofType === 'm2' ? (f.ofVal || '') : ''); if (pr === null) return;
+        if (pr.trim()) { f.ofType = 'm2'; f.ofVal = pr.trim(); } else f.ofVal = '';
+      }
       saveOffers(); renderOffers(); showNotice('Kaydedildi. Teklif PDF\'inin özet sayfasında görünecek.', true);
     } else if (e.target.classList.contains('of-load')) loadOffer(o);
     else if (e.target.classList.contains('of-pdf')) { loadOffer(o); if (!$('btnOffer').disabled) $('btnOffer').click(); else showNotice('Teklif tutarı eksik; "Yükle" ile alanları kontrol edin.'); }

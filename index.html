@@ -620,7 +620,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.49</summary>
+        <summary>Ayarlar · sürüm 12.50</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -3300,7 +3300,8 @@ function poleOf(g){
     });
     lines.forEach(function(l){ total += l.t; area += l.a; l.au = l.r.priceM2 || 0; l.at = l.au ? Math.round(l.a * l.au) : 0; if (l.at > 0 && l.t > 0) { askTotal += l.at; cmpOffer += l.t; askN++; } });
     var off = lines.map(function(l){ return l.r; });
-    return {multi: true, hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 && l.t > 0 ? l.a : 0); }, 0), off: off,
+    var umn = Math.min.apply(null, lines.filter(function(l){ return l.u > 0; }).map(function(l){ return l.u; })), umx = Math.max.apply(null, lines.map(function(l){ return l.u; }));
+    return {multi: true, sameUnit: !(umx > 0 && umn > 0 && Math.abs(umx - umn) / umx > 0.005), hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 && l.t > 0 ? l.a : 0); }, 0), off: off,
       others: rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; }), mode: 'multi', umin: Math.min.apply(null, lines.filter(function(l){ return l.u > 0; }).map(function(l){ return l.u; })), umax: Math.max.apply(null, lines.map(function(l){ return l.u; })), val: total, area: area, unit: area ? total / area : 0, total: total, lines: lines,
       missArea: off.filter(function(r){ return !areaOf(r); }).length, names: sh.map(function(x){ return x.from || x.o.name; }), tos: sh.map(function(x){ return x.to; }).filter(Boolean)};
   }
@@ -3322,6 +3323,8 @@ function poleOf(g){
     var cols = d.hasAsk ?
       [{k: 'no', t: 'Sıra', w: 60}, {k: 'mah', t: 'Mahalle / konum', w: 250}, {k: 'ap', t: 'Ada / Parsel', w: 140}, {k: 'area', t: 'Yüzölçümü', w: 150}, {k: 'au', t: 'Bizim ₺/m²', w: 140}, {k: 'ou', t: 'Teklif ₺/m²', w: 140}, {k: 'at', t: 'Bizim tutar', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 190}, {k: 'df', t: 'Fark', w: 174}] :
       [{k: 'no', t: 'Sıra', w: 70}, {k: 'mah', t: 'Mahalle / konum', w: 350}, {k: 'ap', t: 'Ada / Parsel', w: 170}, {k: 'nit', t: 'Nitelik', w: 220}, {k: 'area', t: 'Yüzölçümü', w: 210}, {k: 'ou', t: '₺/m²', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 224}];
+    var showDiff = d.hasAsk && (!d.multi || d.sameUnit);
+    if (d.hasAsk && !showDiff) { cols = cols.filter(function(c){ return c.k !== 'df'; }); cols.forEach(function(c){ if (c.k === 'ot') c.w += 174; }); }
     var NUM = {area: 1, au: 1, ou: 1, at: 1, ot: 1, df: 1};
     var fmU = function(d){ return d.umax > 0 && d.umin > 0 && Math.abs(d.umax - d.umin) / d.umax > 0.005 ? fm2(d.umin) + ' – ' + fm2(d.umax) : fm2(d.umax > 0 ? d.umax : 0); };
     var fm2 = function(v){ return v ? v.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—'; };
@@ -3379,7 +3382,7 @@ function poleOf(g){
     x.fillStyle = '#15262d'; x.font = F(500, 23); x.textAlign = 'left';
     if (!d.multi) wrap(x, 'Yalnızca ' + trWords(d.total) + ' Türk Lirası\'dır.', PW - 2 * M).forEach(function(ln, i){ x.fillText(ln, M, y + 12 + i * 32); y += 0; });
     y += 70;
-    if (d.hasAsk) {
+    if (showDiff) {
       var dv = d.cmpOffer - d.askTotal, pv = pct(d.cmpOffer, d.askTotal), bw3 = (PW - 2 * M - 40) / 3;
       (d.multi ? [['Bizim fiyatımız (ort. ₺/m²)', fm2(d.askTotal / d.askArea), BRAND], ['Teklif edilen (aynı parseller, ₺/m²)', fm2(d.cmpOffer / d.askArea), BRAND], ['Fark (₺/m²)', (function(q){ return (q > 0 ? '+' : q < 0 ? '−' : '') + fm2(Math.abs(q)).replace(' ₺', ' ₺'); })((d.cmpOffer - d.askTotal) / d.askArea) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]] : [['Bizim fiyatımız (toplam)', fmtTL(d.askTotal), BRAND], ['Teklif edilen (aynı parseller)', fmtTL(d.cmpOffer), BRAND], ['Fark (teklif − bizim)', fdiff(dv) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]]).forEach(function(t, i){
         var tx = M + i * (bw3 + 20);

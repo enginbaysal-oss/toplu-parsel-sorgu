@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.41</summary>
+        <summary>Ayarlar · sürüm 12.42</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1374,7 +1374,11 @@ function poleOf(g){
       var who = prompt('Bu teklifi kim veriyor? (isim)', f.ofFrom || ''); if (who === null) return;
       var tp = prompt('"' + o.name + '" için TOPLAM teklif tutarı (₺).\nBirim fiyat (₺/m²) girecekseniz boş bırakın:', f.ofType === 'toplam' ? (f.ofVal || '') : ''); if (tp === null) return;
       f.ofFrom = who.trim();
-      if (tp.trim()) { f.ofType = 'toplam'; f.ofVal = tp.trim(); }
+      if (tp.trim()) {
+        var tv = parseNum(tp), ar = offerRows(o).reduce(function(q, r){ return q + areaOf(r); }, 0);
+        if (tv > 0 && ar > 0 && tv / ar < 20 && confirm(tp.trim() + ' ₺ toplam olursa m² başına ' + (tv / ar).toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺ eder, çok düşük.\n\nBu tutar m² BAŞINA fiyat mı? (Tamam = ₺/m², İptal = toplam tutar olarak kalsın)')) { f.ofType = 'm2'; f.ofVal = tp.trim(); }
+        else { f.ofType = 'toplam'; f.ofVal = tp.trim(); }
+      }
       else {
         var pr = prompt('Teklif edilen ₺/m² (boş bırakılabilir):', f.ofType === 'm2' ? (f.ofVal || '') : ''); if (pr === null) return;
         if (pr.trim()) { f.ofType = 'm2'; f.ofVal = pr.trim(); } else f.ofVal = '';

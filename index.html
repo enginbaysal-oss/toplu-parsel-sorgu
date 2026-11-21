@@ -386,9 +386,13 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <p class="notice" id="notice" hidden data-step="1 2 3 4"></p>
       <div class="pricesum" id="priceSum" data-step="3">
         <div class="row">
-          <label class="f grow">Toplu m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
-          <button type="button" id="btnBulkPrice" class="ghost" title="İşaretli parsellere, işaret yoksa tümüne uygular">Uygula</button>
-          <button type="button" id="btnClearPrice" class="ghost">Temizle</button>
+          <label class="f grow">Toplu alım m² fiyatı (₺)<input type="text" id="bulkPrice" inputmode="decimal" placeholder="örn. 1.250"></label>
+          <button type="button" id="btnBulkPrice" class="ghost" title="Yalnızca toplu alım toplamını hesaplar; parsel ve renk fiyatlarını değiştirmez">Hesapla</button>
+        </div>
+        <p class="hint" style="margin:4px 0">Toplu alım fiyatı yalnızca aşağıdaki "toplu alım" toplamını verir. Parsellerin ve renklerin kendi fiyatları değişmez.</p>
+        <div class="row">
+          <button type="button" id="btnBulkWrite" class="ghost" title="Dikkat: parsel ve renk fiyatlarının üzerine yazar">Her parsele yaz</button>
+          <button type="button" id="btnClearPrice" class="ghost">Fiyatları temizle</button>
         </div>
         <div id="priceTot" style="margin-top:6px"></div>
       </div>
@@ -594,7 +598,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.33</summary>
+        <summary>Ayarlar · sürüm 12.34</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1542,7 +1546,16 @@ function poleOf(g){
     var box = $('priceTot'); if (!box) return;
     var sum = 0, n = 0, ar = 0;
     rows.forEach(function(r){ if (r.hidden || !r.priceM2) return; var t = totalOf(r); if (t > 0) { sum += t; n++; ar += areaForPrice(r); } });
-    box.innerHTML = n ? '<b>Toplam fiyat: ' + esc(fmtTL(sum)) + '</b> · ' + n + ' parsel · ' + esc(fmtArea(ar)) + (ar ? ' · ortalama ' + esc(fmtTL(sum / ar)) + '/m²' : '') : '';
+    var h = n ? '<div><b>Parsel / renk fiyatlarına göre toplam: ' + esc(fmtTL(sum)) + '</b> · ' + n + ' parsel · ' + esc(fmtArea(ar)) + (ar ? ' · ortalama ' + esc(fmtTL(sum / ar)) + '/m²' : '') + '</div>' : '';
+    /* toplu alım: ayrı bir hesap, parsel/renk fiyatlarına dokunmaz (işaretli parseller, yoksa görünen tümü) */
+    var bv = parseNum($('bulkPrice').value);
+    if (bv) {
+      var tg = rows.filter(function(r){ return r.checked && !r.hidden && areaForPrice(r) > 0; }); var scope = 'işaretli';
+      if (!tg.length) { tg = rows.filter(function(r){ return !r.hidden && areaForPrice(r) > 0; }); scope = 'görünen tüm'; }
+      var ba = 0; tg.forEach(function(r){ ba += areaForPrice(r); });
+      h += '<div style="margin-top:4px"><b>Toplu alım: ' + esc(fmtTL(ba * bv)) + '</b> · ' + tg.length + ' ' + scope + ' parsel · ' + esc(fmtArea(ba)) + ' × ' + esc(bv.toLocaleString('tr-TR', {maximumFractionDigits: 2})) + ' ₺/m²</div>';
+    }
+    box.innerHTML = h;
   }
   function renderTable(){
     renderColorSum();
@@ -1701,7 +1714,14 @@ function poleOf(g){
   $('btnAddToggle').addEventListener('click', function(){ var pn = $('addPanel'); pn.hidden = !pn.hidden; this.setAttribute('aria-expanded', String(!pn.hidden)); if (!pn.hidden) $('addText').focus(); });
   $('btnBulkPrice').addEventListener('click', function(){
     var v = parseNum($('bulkPrice').value); if (!v) { showNotice('Önce geçerli bir m² fiyatı yazın.'); return; }
+    renderPriceTot();
+  });
+  $('bulkPrice').addEventListener('input', renderPriceTot);
+  document.addEventListener('change', function(e){ var t = e.target; if (t && (t.id === 'chkAll' || (t.type === 'checkbox' && t.closest && t.closest('#tbody')))) setTimeout(renderPriceTot, 0); });
+  $('btnBulkWrite').addEventListener('click', function(){
+    var v = parseNum($('bulkPrice').value); if (!v) { showNotice('Önce geçerli bir m² fiyatı yazın.'); return; }
     var c = rows.filter(function(r){ return r.checked; }); if (!c.length) c = rows.slice();
+    if (!confirm(c.length + ' parselin m² fiyatı ' + v.toLocaleString('tr-TR') + ' ₺ olarak yazılsın mı?\n(Bu parsellerin renk/parsel fiyatlarının üzerine yazılır.)')) return;
     c.forEach(function(r){ r.priceM2 = v; }); renderTable(); saveRows();
   });
   $('btnClearPrice').addEventListener('click', function(){

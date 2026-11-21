@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.44</summary>
+        <summary>Ayarlar · sürüm 12.45</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -3478,7 +3478,7 @@ function poleOf(g){
     // alt bilgi
     pages.forEach(function(pg, i){
       var xx = pg.x; xx.fillStyle = '#586a72'; xx.font = F(400, 21); xx.textAlign = 'center'; xx.textBaseline = 'middle';
-      xx.fillText((brand.firm ? brand.firm + '  ·  ' : '') + 'Parsel sınırları TKGM verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez.  ·  Sayfa ' + (i + 1) + ' / ' + (pages.length + 1), PW / 2, PH - 50);
+      xx.fillText((brand.firm ? brand.firm + '  ·  ' : '') + 'Parsel sınırları TKGM verisidir, bilgi amaçlıdır; kesin sınır yerine geçmez.  ·  Sayfa ' + (i + 2) + ' / ' + (pages.length + 1), PW / 2, PH - 50);
     });
     return pages.map(function(pg){ return pg.c; });
   }
@@ -3515,10 +3515,10 @@ function poleOf(g){
       showNotice('PDF hazırlanıyor…', true);
       await loadJsPdf();
       var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta, multi ? sm : null);
-      var doc = new JS({orientation: 'portrait', unit: 'mm', format: [210, 297], compress: true});
-      pgs.forEach(function(c, i){ if (i) doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
       var cw = res.canvas.width, ch = res.canvas.height, long = 297, pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
-      doc.addPage([pw, ph], cw >= ch ? 'landscape' : 'portrait'); doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
+      var doc = new JS({orientation: cw >= ch ? 'landscape' : 'portrait', unit: 'mm', format: [pw, ph], compress: true});
+      doc.addImage(res.canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pw, ph);
+      pgs.forEach(function(c){ doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
       await saveBlob('teklif-' + stamp + '.pdf', doc.output('blob'), 'application/pdf');
     } catch (e) {
       showNotice('Teklif oluşturulamadı: ' + (e && e.message ? e.message : e));

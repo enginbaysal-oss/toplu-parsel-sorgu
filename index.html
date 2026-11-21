@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.45</summary>
+        <summary>Ayarlar · sürüm 12.46</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -3502,7 +3502,7 @@ function poleOf(g){
         mapItems = []; legendItems = [];
         sm.slice().reverse().forEach(function(x){ x.rs.forEach(function(r){ var c = Object.create(r); c.color = x.color; c.lineColor = x.color; c.hatch = null; mapItems.push(c); }); });
         sm.forEach(function(x){ legendItems.push({color: x.color, label: x.o.name + (x.from ? ' · ' + x.from : '')}); });
-        withOthers = false;
+        if (withOthers) legendItems.push({color: 'rgba(100,112,130,0.45)', label: 'Diğer parseller'});
       }
       for (var attempt = 0; attempt < 3 && !res; attempt++) {
         try {

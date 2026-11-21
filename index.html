@@ -576,12 +576,25 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
         <label class="f grow">Kayıt adı<input type="text" id="arcName" maxlength="80" placeholder="Örn. Ahmet Bey – Soma 196 ada" autocomplete="off"></label>
         <button type="button" id="btnArcSave" disabled>Arşive kaydet</button>
       </div>
+      <details class="optdd" id="cloudBox">
+        <summary id="cloudSum">☁ Bulut: giriş yapılmadı</summary>
+        <div id="cloudOut">
+          <p class="hint">Kayıtlarınız hesabınızda saklanır; başka bilgisayar ya da telefonda aynı hesapla giriş yapınca gelir. EmlakCRM hesabınızı kullanın.</p>
+          <label class="f">E-posta<input type="text" id="cloudMail" inputmode="email" autocomplete="username" spellcheck="false"></label>
+          <label class="f">Şifre<input type="password" id="cloudPass" autocomplete="current-password"></label>
+          <button type="button" id="cloudLogin" class="primary">Giriş yap</button>
+        </div>
+        <div id="cloudIn" hidden>
+          <div class="row"><button type="button" id="cloudPush">Yerel kayıtları buluta gönder</button><button type="button" id="cloudLogout" class="ghost">Çıkış</button></div>
+        </div>
+        <div id="cloudMsg" class="hint" role="status"></div>
+      </details>
       <div id="arcList" class="arclist"></div>
       <p class="hint">Kayıtlar bu cihazda saklanır. <b>Paylaş</b> ile WhatsApp, e-posta gibi uygulamalarla gönderebilirsiniz; alan cihazda "Dosyadan yükle → Yedek" ile açılır.</p>
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.32</summary>
+        <summary>Ayarlar · sürüm 12.33</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -2263,10 +2276,79 @@ function poleOf(g){
   }
   function arcAll(){ return arcTx('readonly', function(st){ return st.getAll(); }).then(function(a){ return (a || []).sort(function(x, y){ return y.ts - x.ts; }); }); }
   function fmtDT(ts){ var d = new Date(ts), z = function(n){ return String(n).padStart(2, '0'); }; return z(d.getDate()) + '.' + z(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + z(d.getHours()) + ':' + z(d.getMinutes()); }
+  /* ---------- bulut arşivi (Supabase, hesap bazlı) ---------- */
+  var CL = {base: 'https://tffvwxskvjuxoekwgdef.supabase.co', key: 'sb_publishable_ADLnhwviFBqWtBkq94Adag_ULlAuzUe', ls: 'parsel-harita-bulut-v1'}, cloudRows = [], cloudSess = null;
+  try { cloudSess = JSON.parse(localStorage.getItem(CL.ls) || 'null'); } catch (e) {}
+  function cloudSave(){ try { if (cloudSess) localStorage.setItem(CL.ls, JSON.stringify(cloudSess)); else localStorage.removeItem(CL.ls); } catch (e) {} }
+  function cloudMsg(t, bad){ var m = $('cloudMsg'); m.textContent = t || ''; m.style.color = bad ? 'var(--crit)' : ''; }
+  function cloudUi(){
+    var on = !!(cloudSess && cloudSess.access_token);
+    $('cloudOut').hidden = on; $('cloudIn').hidden = !on;
+    $('cloudSum').textContent = on ? '☁ Bulut: ' + cloudSess.email + ' (bağlı)' : '☁ Bulut: giriş yapılmadı';
+  }
+  async function cloudAuth(body, grant){
+    var r = await fetch(CL.base + '/auth/v1/token?grant_type=' + grant, {method: 'POST', headers: {apikey: CL.key, 'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    var d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || !d.access_token) throw new Error(r.status === 400 || r.status === 401 ? (grant === 'password' ? 'E-posta ya da şifre hatalı.' : 'Oturum süresi doldu, yeniden giriş yapın.') : (d.msg || d.error_description || ('Sunucu hatası ' + r.status)));
+    cloudSess = {access_token: d.access_token, refresh_token: d.refresh_token, exp: Date.now() + (d.expires_in || 3600) * 1000, email: (d.user && d.user.email) || (cloudSess && cloudSess.email) || ''};
+    cloudSave(); return cloudSess;
+  }
+  async function cloudReq(path, opt){
+    opt = opt || {};
+    if (!cloudSess) throw new Error('Önce bulut hesabına giriş yapın.');
+    if (Date.now() > cloudSess.exp - 60000) { try { await cloudAuth({refresh_token: cloudSess.refresh_token}, 'refresh_token'); } catch (e) { cloudSess = null; cloudSave(); cloudUi(); throw e; } }
+    var h = {apikey: CL.key, Authorization: 'Bearer ' + cloudSess.access_token}; if (opt.body) h['Content-Type'] = 'application/json'; if (opt.prefer) h.Prefer = opt.prefer;
+    var r;
+    try { r = await fetch(CL.base + path, {method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined}); }
+    catch (e) { throw new Error('Buluta ulaşılamadı (internet?).'); }
+    var d = null; try { d = await r.json(); } catch (e) {}
+    if (!r.ok) {
+      if (r.status === 404 || (d && /parsel_arsiv/.test(d.message || '') && /not find|does not exist/.test(d.message || ''))) throw new Error('Bulut arşiv tablosu henüz kurulmamış (bir kez SQL çalıştırılmalı).');
+      throw new Error((d && (d.message || d.error_description || d.error)) || ('Sunucu hatası ' + r.status));
+    }
+    return d;
+  }
+  async function cloudRefresh(){
+    if (!cloudSess) { cloudRows = []; arcRender(); return; }
+    try { cloudRows = await cloudReq('/rest/v1/parsel_arsiv?select=id,name,title,n,miss,client_ts,updated_at&order=updated_at.desc&limit=500') || []; cloudMsg(cloudRows.length + ' kayıt bulutta.'); }
+    catch (e) { cloudMsg(e.message, true); }
+    arcRender();
+  }
+  async function cloudUpsert(rec){
+    await cloudReq('/rest/v1/parsel_arsiv?on_conflict=owner_id,name', {method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+      body: {name: rec.name, title: rec.title || '', n: rec.n || 0, miss: rec.miss || 0, client_ts: rec.ts, data: rec.text}});
+  }
+  $('cloudLogin').addEventListener('click', async function(){
+    var m = $('cloudMail').value.trim(), pw = $('cloudPass').value;
+    if (!m || !pw) return cloudMsg('E-posta ve şifre yazın.', true);
+    $('cloudLogin').disabled = true; cloudMsg('Giriş yapılıyor…');
+    try { cloudSess = null; await cloudAuth({email: m, password: pw}, 'password'); $('cloudPass').value = ''; cloudUi(); await cloudRefresh(); $('cloudBox').open = true; }
+    catch (e) { cloudMsg(e.message, true); }
+    $('cloudLogin').disabled = false;
+  });
+  $('cloudLogout').addEventListener('click', function(){ cloudSess = null; cloudSave(); cloudRows = []; cloudUi(); cloudMsg('Çıkış yapıldı. Kayıtlar bulutta kalır.'); arcRender(); });
+  $('cloudPush').addEventListener('click', async function(){
+    $('cloudPush').disabled = true; cloudMsg('Gönderiliyor…');
+    try {
+      var loc = await arcAll(), n = 0;
+      for (var i = 0; i < loc.length; i++) { await cloudUpsert(loc[i]); n++; cloudMsg(n + '/' + loc.length + ' gönderildi…'); }
+      await cloudRefresh(); cloudMsg(n + ' yerel kayıt buluta gönderildi.');
+    } catch (e) { cloudMsg(e.message, true); }
+    $('cloudPush').disabled = false;
+  });
   function arcRender(){
     arcAll().then(function(list){
-      $('arcList').innerHTML = list.length ? list.map(function(k){
-        return '<div class="arc" data-id="' + k.id + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + '</div></div>' +
+      var byName = {}, all = [];
+      list.forEach(function(k){ var o = {name: k.name, ts: k.ts, n: k.n, miss: k.miss, loc: k, cl: null}; byName[k.name] = o; all.push(o); });
+      cloudRows.forEach(function(c){
+        var o = byName[c.name], ts = c.client_ts || Date.parse(c.updated_at);
+        if (o) { o.cl = c; if (ts > o.ts) o.ts = ts; } else { o = {name: c.name, ts: ts, n: c.n, miss: c.miss, loc: null, cl: c}; byName[c.name] = o; all.push(o); }
+      });
+      all.sort(function(x, y){ return y.ts - x.ts; });
+      var on = !!cloudSess;
+      $('arcList').innerHTML = all.length ? all.map(function(k){
+        var where = k.loc && k.cl ? ' · ☁ bulutta' : k.cl ? ' · ☁ yalnız bulutta' : (on ? ' · yalnız bu cihazda' : '');
+        return '<div class="arc" data-name="' + esc(k.name) + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + where + '</div></div>' +
           '<button type="button" class="arc-open">Aç</button><button type="button" class="arc-share">Paylaş</button><button type="button" class="arc-del danger">Sil</button></div>';
       }).join('') : '<div class="hint">Henüz kayıt yok.</div>';
     }).catch(function(e){ $('arcList').innerHTML = '<div class="hint">' + esc(e.message) + '</div>'; });
@@ -2275,34 +2357,53 @@ function poleOf(g){
   $('btnArcSave').addEventListener('click', function(){
     var nm = $('arcName').value.trim() || ($('outTitle').value.trim() || 'Parsel Haritası') + ' · ' + fmtDT(Date.now());
     var found = rows.filter(function(r){ return r.feature; }).length, miss = rows.filter(function(r){ return !r.feature && (r.status === 'yok' || r.status === 'hata'); }).length;
+    var rec = null;
     arcAll().then(function(list){
       var ex = list.filter(function(k){ return k.name === nm; })[0];
-      if (ex && !confirm('"' + nm + '" adlı kayıt var. Üzerine yazılsın mı?')) return null;
-      var rec = {id: ex ? ex.id : Date.now(), name: nm, ts: Date.now(), n: found, miss: miss, title: $('outTitle').value, text: geoText()};
-      return arcTx('readwrite', function(st){ return st.put(rec); }).then(function(){ showNotice('Arşive kaydedildi: ' + nm, true); $('arcName').value = ''; arcRender(); });
+      if ((ex || cloudRows.some(function(c){ return c.name === nm; })) && !confirm('"' + nm + '" adlı kayıt var. Üzerine yazılsın mı?')) return null;
+      rec = {id: ex ? ex.id : Date.now(), name: nm, ts: Date.now(), n: found, miss: miss, title: $('outTitle').value, text: geoText()};
+      return arcTx('readwrite', function(st){ return st.put(rec); }).then(function(){ $('arcName').value = ''; arcRender();
+        if (!cloudSess) { showNotice('Arşive kaydedildi (bu cihazda): ' + nm + '. Başka cihazda görmek için bulut hesabına giriş yapın.', true); return; }
+        return cloudUpsert(rec).then(function(){ showNotice('Arşive kaydedildi (bulutta da): ' + nm, true); return cloudRefresh(); })
+          .catch(function(e){ showNotice('Bu cihaza kaydedildi ama buluta gönderilemedi: ' + e.message); });
+      });
     }).catch(function(e){ showNotice('Arşive kaydedilemedi: ' + e.message); });
   });
+  async function arcGet(name){
+    var loc = (await arcAll()).filter(function(k){ return k.name === name; })[0];
+    if (loc) return loc;
+    var c = cloudRows.filter(function(x){ return x.name === name; })[0];
+    if (!c) throw new Error('Kayıt bulunamadı.');
+    var d = await cloudReq('/rest/v1/parsel_arsiv?id=eq.' + encodeURIComponent(c.id) + '&select=name,title,data,n,miss,client_ts');
+    if (!d || !d[0]) throw new Error('Kayıt buluttan alınamadı.');
+    return {name: d[0].name, title: d[0].title, text: d[0].data, n: d[0].n, miss: d[0].miss, ts: d[0].client_ts || Date.now()};
+  }
   $('arcList').addEventListener('click', function(e){
     var box = e.target.closest('.arc'); if (!box) return;
-    var id = +box.dataset.id;
+    var name = box.dataset.name;
     if (e.target.classList.contains('arc-open')) {
       if (rows.length && !confirm('Mevcut liste kapatılıp bu kayıt açılsın mı? (İsterseniz önce "Arşive kaydet" ile saklayın.)')) return;
-      arcTx('readonly', function(st){ return st.get(id); }).then(function(k){
-        if (!k) throw new Error('Kayıt bulunamadı.');
+      arcGet(name).then(function(k){
         if (k.title) { $('outTitle').value = k.title; }
         applyGeoText(k.text, 'arşivden açıldı: ' + k.name);
       }).catch(function(er){ showNotice('Kayıt açılamadı: ' + er.message); });
     } else if (e.target.classList.contains('arc-share')) {
-      arcTx('readonly', function(st){ return st.get(id); }).then(function(k){
-        if (!k) throw new Error('Kayıt bulunamadı.');
+      arcGet(name).then(function(k){
         var slug = String(k.name).toLowerCase().replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'kayit';
         return shareBlob('parsel-' + slug + '.json', new Blob([k.text], {type: 'application/json'}), 'application/json', k.name);
       }).catch(function(er){ showNotice('Paylaşılamadı: ' + (er && er.message ? er.message : er)); });
     } else if (e.target.classList.contains('arc-del')) {
-      if (!confirm('Bu arşiv kaydı silinsin mi?')) return;
-      arcTx('readwrite', function(st){ return st.delete(id); }).then(arcRender).catch(function(er){ showNotice('Silinemedi: ' + er.message); });
+      var cl = cloudRows.filter(function(x){ return x.name === name; })[0];
+      if (!confirm('"' + name + '" silinsin mi?' + (cl ? '\nBulut kaydı da silinir.' : ''))) return;
+      arcAll().then(function(list){
+        var loc = list.filter(function(k){ return k.name === name; })[0];
+        return (loc ? arcTx('readwrite', function(st){ return st.delete(loc.id); }) : Promise.resolve()).then(function(){
+          return cl ? cloudReq('/rest/v1/parsel_arsiv?id=eq.' + encodeURIComponent(cl.id), {method: 'DELETE'}).then(cloudRefresh) : arcRender();
+        });
+      }).catch(function(er){ showNotice('Silinemedi: ' + er.message); });
     }
   });
+  cloudUi(); if (cloudSess) cloudRefresh();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
   arcRender();
   $('fileImport').addEventListener('change', function(e){ var f = e.target.files[0]; if (f) readGeoFile(f); e.target.value = ''; });

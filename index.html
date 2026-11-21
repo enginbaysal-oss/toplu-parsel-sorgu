@@ -541,6 +541,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       <button class="cta" id="btnOffer" type="button" disabled>Teklif PDF'i al</button>
       <div class="ofsave">
         <h3>Tekliflerim</h3>
+        <div class="row" id="ofAllRow"><button type="button" id="btnOfAll">Hepsini göster</button><button type="button" id="btnOfNone">Hepsini gizle</button></div>
         <div class="row">
           <label class="f grow">Teklif adı<input type="text" id="ofName" maxlength="80" autocomplete="off" placeholder="örn. Ahmet Bey · Pelitköy"></label>
           <button type="button" id="btnOfSave" disabled>Teklifi kaydet</button>
@@ -616,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.36</summary>
+        <summary>Ayarlar · sürüm 12.37</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1320,7 +1321,8 @@ function poleOf(g){
       return '<div class="ofi' + (on ? '' : ' off') + '" data-id="' + esc(o.id) + '"><input type="checkbox" class="of-show" ' + (on ? 'checked' : '') + ' aria-label="Haritada göster"><div class="of-main"><div class="of-name">' + esc(o.name) + '</div><div class="of-meta">' + o.keys.length + ' parsel' + (ar ? ' · ' + esc(fmtArea(ar)) : '') + (o.total > 0 ? ' · ' + esc(fmtTL(o.total)) : '') + ' · ' + esc(fmtDT(o.ts)) + '</div>' + state + '</div>' +
         '<button type="button" class="of-load">Yükle</button><button type="button" class="of-pdf">PDF</button><button type="button" class="of-del danger">Sil</button></div>';
     }).join('') : '<div class="hint">Henüz kayıtlı teklif yok. Parselleri işaretleyip teklifi doldurun, ad verip "Teklifi kaydet"e basın.</div>';
-    $('btnOfSave').disabled = !foundRows().length;
+    $('btnOfSave').disabled = !rows.some(function(r){ return r.feature; });
+    $('ofAllRow').style.display = offers.length ? '' : 'none';
   }
   function setOfferVisible(o, on){
     o.show = on;
@@ -1329,6 +1331,14 @@ function poleOf(g){
     offerRows(o).forEach(function(r){ if (on) setHidden(r, false); else if (!keep[rowKey(r)]) setHidden(r, true); });
     saveOffers(); saveRows(); renderTable(); renderOffers();
   }
+  function setAllOffers(on){
+    offers.forEach(function(o){ o.show = on; });
+    rows.forEach(function(r){ if (r.feature) setHidden(r, !on); });
+    if (on) offers.forEach(function(o){ offerRows(o).forEach(function(r){ setHidden(r, false); }); });
+    saveOffers(); saveRows(); renderTable(); renderOffers();
+  }
+  $('btnOfAll').addEventListener('click', function(){ setAllOffers(true); });
+  $('btnOfNone').addEventListener('click', function(){ setAllOffers(false); });
   function offerForm(o){ var f = {}; ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(k){ f[k] = $(k).value; }); return f; }
   $('btnOfSave').addEventListener('click', function(){
     var d = offerData(); if (!d.off.length) return showNotice('Önce teklif konusu parselleri işaretleyin.');

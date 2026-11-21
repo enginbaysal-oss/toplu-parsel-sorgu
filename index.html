@@ -325,6 +325,9 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 .ofsave h3{margin:0 0 6px;font-size:14px}
 .ofi{display:flex;gap:8px;align-items:center;padding:7px 8px;border:1px solid var(--btn-bd);border-radius:10px;margin-top:6px;background:var(--card)}
 .ofi.off{opacity:.65}
+.of-edit{margin-top:4px;padding:8px;border:1px dashed var(--btn-bd);border-radius:8px;display:grid;gap:6px}
+.of-edit .row{display:flex;gap:8px;align-items:flex-end}
+.of-edit select,.of-edit input{width:100%}
 .ofi .of-main{flex:1;min-width:0}.ofi .of-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ofi .of-meta{font-size:12px;color:var(--muted)}
 .ofi .of-state{font-size:12px;font-weight:700}.ofi .of-state.on{color:#1a7f37}.ofi .of-state.hid{color:#9a6700}
@@ -617,7 +620,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.48</summary>
+        <summary>Ayarlar · sürüm 12.49</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1370,19 +1373,24 @@ function poleOf(g){
     var box = e.target.closest('.ofi'); if (!box) return;
     var o = offers.filter(function(x){ return String(x.id) === box.dataset.id; })[0]; if (!o) return;
     if (e.target.classList.contains('of-info')) {
+      var ed = box.querySelector('.of-edit');
+      if (ed) { ed.remove(); return; }
       var f = o.form = o.form || {};
-      var who = prompt('Bu teklifi kim veriyor? (isim)', f.ofFrom || ''); if (who === null) return;
-      f.ofFrom = who.trim();
-      var pr = prompt('"' + o.name + '" için teklif edilen ₺/m² (m² başına), örn. 370\nToplam tutar girecekseniz boş bırakın:', f.ofType === 'm2' ? (f.ofVal || '') : ''); if (pr === null) return;
-      if (pr.trim()) {
-        var pv2 = parseNum(pr);
-        if (pv2 > 50000 && confirm(pr.trim() + ' ₺/m² çok yüksek görünüyor.\n\nBu TOPLAM teklif tutarı mı? (Tamam = toplam tutar, İptal = ₺/m² olarak kalsın)')) { f.ofType = 'toplam'; f.ofVal = pr.trim(); }
-        else { f.ofType = 'm2'; f.ofVal = pr.trim(); }
-      } else {
-        var tp = prompt('"' + o.name + '" için TOPLAM teklif tutarı (₺), örn. 7.500.000 (boş bırakılabilir):', f.ofType === 'toplam' ? (f.ofVal || '') : ''); if (tp === null) return;
-        if (tp.trim()) { f.ofType = 'toplam'; f.ofVal = tp.trim(); } else f.ofVal = '';
-      }
-      saveOffers(); renderOffers(); showNotice('Kaydedildi. Teklif PDF\'inin özet sayfasında görünecek.', true);
+      ed = document.createElement('div'); ed.className = 'of-edit';
+      ed.innerHTML = '<label class="f">Teklif veren<input type="text" class="ed-who" maxlength="80" value="' + esc(f.ofFrom || '') + '"></label>' +
+        '<div class="row"><label class="f">Teklif şekli<select class="ed-type"><option value="m2"' + (f.ofType !== 'toplam' ? ' selected' : '') + '>m² başına (₺/m²)</option><option value="toplam"' + (f.ofType === 'toplam' ? ' selected' : '') + '>Toplam tutar (₺)</option></select></label>' +
+        '<label class="f grow">Tutar<input type="text" inputmode="decimal" class="ed-val" placeholder="örn. 370" value="' + esc(f.ofVal || '') + '"></label></div>' +
+        '<div class="row"><button type="button" class="ed-ok">Kaydet</button><button type="button" class="ed-cancel">Vazgeç</button></div>';
+      box.appendChild(ed); box.style.flexWrap = 'wrap'; ed.style.flexBasis = '100%';
+      var upd = function(){ ed.querySelector('.ed-val').placeholder = ed.querySelector('.ed-type').value === 'm2' ? 'örn. 370' : 'örn. 7.500.000'; }; upd();
+      ed.querySelector('.ed-type').addEventListener('change', upd);
+      ed.querySelector('.ed-cancel').addEventListener('click', function(){ ed.remove(); });
+      ed.querySelector('.ed-ok').addEventListener('click', function(){
+        var v = ed.querySelector('.ed-val').value.trim(), t = ed.querySelector('.ed-type').value, n = parseNum(v);
+        if (v && !n) { showNotice('Tutarı rakamla yazın, örn. 370 ya da 7.500.000'); return; }
+        f.ofFrom = ed.querySelector('.ed-who').value.trim(); f.ofType = t; f.ofVal = v;
+        saveOffers(); renderOffers(); showNotice('Kaydedildi. Teklif PDF\'inde bu bilgi kullanılacak.', true);
+      });
     } else if (e.target.classList.contains('of-load')) loadOffer(o);
     else if (e.target.classList.contains('of-pdf')) { loadOffer(o); if (!$('btnOffer').disabled) $('btnOffer').click(); else showNotice('Teklif tutarı eksik; "Yükle" ile alanları kontrol edin.'); }
     else if (e.target.classList.contains('of-del')) { if (confirm('"' + o.name + '" teklifi silinsin mi? (Parseller silinmez.)')) { offers.splice(offers.indexOf(o), 1); saveOffers(); renderOffers(); } }

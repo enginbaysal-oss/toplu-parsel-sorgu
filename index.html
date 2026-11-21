@@ -321,6 +321,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
 .stepnav{display:flex;gap:8px;position:sticky;bottom:0;z-index:6;background:var(--zone);padding:8px 0;margin-top:auto}
 .stepnav button{flex:1}
 .sh{display:none!important}
+.ofsave{margin-top:12px;padding-top:8px;border-top:1px solid var(--btn-bd)}
+.ofsave h3{margin:0 0 6px;font-size:14px}
+.ofi{display:flex;gap:8px;align-items:center;padding:7px 8px;border:1px solid var(--btn-bd);border-radius:10px;margin-top:6px;background:var(--card)}
+.ofi.off{opacity:.65}
+.ofi .of-main{flex:1;min-width:0}.ofi .of-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ofi .of-meta{font-size:12px;color:var(--muted)}
+.ofi .of-state{font-size:12px;font-weight:700}.ofi .of-state.on{color:#1a7f37}.ofi .of-state.hid{color:#9a6700}
+.ofi button{padding:5px 9px;font-size:12.5px}
+.ofi input[type=checkbox]{width:20px;height:20px}
 </style>
 </head>
 <body>
@@ -530,6 +539,15 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
       </label>
       <div id="ofInfo" class="hint"></div>
       <button class="cta" id="btnOffer" type="button" disabled>Teklif PDF'i al</button>
+      <div class="ofsave">
+        <h3>Tekliflerim</h3>
+        <div class="row">
+          <label class="f grow">Teklif adı<input type="text" id="ofName" maxlength="80" autocomplete="off" placeholder="örn. Ahmet Bey · Pelitköy"></label>
+          <button type="button" id="btnOfSave" disabled>Teklifi kaydet</button>
+        </div>
+        <div id="ofList" class="oflist"></div>
+        <p class="hint">Kutuyu işaretlerseniz teklifin parselleri haritada görünür, kaldırırsanız gizlenir. Teklifler çalışmayla birlikte "Arşive kaydet" ile arşive (ve buluta) da yazılır.</p>
+      </div>
     </section>
     <section id="secOut" data-step="4" data-send="out">
       <h2>Müşteri çıktısı</h2>
@@ -598,7 +616,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.35</summary>
+        <summary>Ayarlar · sürüm 12.36</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1108,6 +1126,7 @@ function poleOf(g){
   }
 
   /* ---------- durum ---------- */
+  var offers = [];
   var rows = [], abort = false, running = false, selected = null, blocked = 0;
   var memoCache = new Map();
   function memo(k, fn){
@@ -1285,6 +1304,61 @@ function poleOf(g){
     }, 400); }).observe(document.getElementById('tbody'), {childList: true});
     apply();
   })();
+
+  /* ---------- Tekliflerim: isimle kaydet, haritada göster/gizle ---------- */
+  var OFFERS_KEY = 'parsel-harita-teklifler-v1';
+  function rowKey(r){ return [r.il, r.ilce, r.mah, r.ada, r.parsel].map(function(x){ return String(x == null ? '' : x).trim().toLowerCase(); }).join('|'); }
+  function saveOffers(){ try { localStorage.setItem(OFFERS_KEY, JSON.stringify(offers)); } catch (e) {} }
+  function loadOffers(){ try { var a = JSON.parse(localStorage.getItem(OFFERS_KEY) || '[]'); if (Array.isArray(a)) offers = a.filter(function(o){ return o && o.name && Array.isArray(o.keys); }); } catch (e) {} }
+  function offerRows(o){ var set = {}; o.keys.forEach(function(k){ set[k] = 1; }); return rows.filter(function(r){ return r.feature && set[rowKey(r)]; }); }
+  function renderOffers(){
+    var box = $('ofList'); if (!box) return;
+    box.innerHTML = offers.length ? offers.map(function(o){
+      var rs = offerRows(o), vis = rs.filter(function(r){ return !r.hidden; }).length, on = o.show !== false;
+      var ar = rs.reduce(function(a, r){ return a + areaOf(r); }, 0);
+      var state = !rs.length ? '<span class="of-state hid">Parseller listede yok</span>' : vis === rs.length ? '<span class="of-state on">Haritada görünüyor</span>' : vis ? '<span class="of-state on">Kısmen görünüyor (' + vis + '/' + rs.length + ')</span>' : '<span class="of-state hid">Haritada gizli</span>';
+      return '<div class="ofi' + (on ? '' : ' off') + '" data-id="' + esc(o.id) + '"><input type="checkbox" class="of-show" ' + (on ? 'checked' : '') + ' aria-label="Haritada göster"><div class="of-main"><div class="of-name">' + esc(o.name) + '</div><div class="of-meta">' + o.keys.length + ' parsel' + (ar ? ' · ' + esc(fmtArea(ar)) : '') + (o.total > 0 ? ' · ' + esc(fmtTL(o.total)) : '') + ' · ' + esc(fmtDT(o.ts)) + '</div>' + state + '</div>' +
+        '<button type="button" class="of-load">Yükle</button><button type="button" class="of-pdf">PDF</button><button type="button" class="of-del danger">Sil</button></div>';
+    }).join('') : '<div class="hint">Henüz kayıtlı teklif yok. Parselleri işaretleyip teklifi doldurun, ad verip "Teklifi kaydet"e basın.</div>';
+    $('btnOfSave').disabled = !foundRows().length;
+  }
+  function setOfferVisible(o, on){
+    o.show = on;
+    var others = offers.filter(function(x){ return x !== o && x.show !== false; }), keep = {};
+    others.forEach(function(x){ x.keys.forEach(function(k){ keep[k] = 1; }); });
+    offerRows(o).forEach(function(r){ if (on) setHidden(r, false); else if (!keep[rowKey(r)]) setHidden(r, true); });
+    saveOffers(); saveRows(); renderTable(); renderOffers();
+  }
+  function offerForm(o){ var f = {}; ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(k){ f[k] = $(k).value; }); return f; }
+  $('btnOfSave').addEventListener('click', function(){
+    var d = offerData(); if (!d.off.length) return showNotice('Önce teklif konusu parselleri işaretleyin.');
+    var nm = $('ofName').value.trim() || ($('ofTo').value.trim() || 'Teklif') + ' · ' + fmtDT(Date.now());
+    var ex = offers.filter(function(x){ return x.name === nm; })[0];
+    if (ex && !confirm('"' + nm + '" adlı teklif var. Üzerine yazılsın mı?')) return;
+    var o = {id: ex ? ex.id : String(Date.now()), name: nm, ts: Date.now(), keys: d.off.map(rowKey), total: d.total || 0, show: true, form: offerForm()};
+    if (ex) offers[offers.indexOf(ex)] = o; else offers.unshift(o);
+    $('ofName').value = ''; saveOffers(); renderOffers(); showNotice('Teklif kaydedildi: ' + nm + ' (çalışmayla birlikte arşive de yazmak için "Arşive kaydet")', true);
+  });
+  function loadOffer(o){
+    var f = o.form || {}; ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(k){ if (f[k] != null) $(k).value = f[k]; });
+    var set = {}; o.keys.forEach(function(k){ set[k] = 1; });
+    rows.forEach(function(r){ r.checked = !!(r.feature && set[rowKey(r)]); });
+    renderTable(); syncOffer(); renderOffers();
+  }
+  $('ofList').addEventListener('click', function(e){
+    var box = e.target.closest('.ofi'); if (!box) return;
+    var o = offers.filter(function(x){ return String(x.id) === box.dataset.id; })[0]; if (!o) return;
+    if (e.target.classList.contains('of-load')) loadOffer(o);
+    else if (e.target.classList.contains('of-pdf')) { loadOffer(o); if (!$('btnOffer').disabled) $('btnOffer').click(); else showNotice('Teklif tutarı eksik; "Yükle" ile alanları kontrol edin.'); }
+    else if (e.target.classList.contains('of-del')) { if (confirm('"' + o.name + '" teklifi silinsin mi? (Parseller silinmez.)')) { offers.splice(offers.indexOf(o), 1); saveOffers(); renderOffers(); } }
+  });
+  $('ofList').addEventListener('change', function(e){
+    if (!e.target.classList.contains('of-show')) return;
+    var box = e.target.closest('.ofi'), o = offers.filter(function(x){ return String(x.id) === box.dataset.id; })[0];
+    if (o) setOfferVisible(o, e.target.checked);
+  });
+  loadOffers(); renderOffers();
+  new MutationObserver(function(){ renderOffers(); }).observe($('tbody'), {childList: true});
   var instEv = null;
   window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); instEv = e; $('btnInstall').hidden = false; });
   window.addEventListener('appinstalled', function(){ instEv = null; $('btnInstall').hidden = true; });
@@ -2039,6 +2113,7 @@ function poleOf(g){
     }), bulunamayanlar: rows.filter(function(r){ return !r.feature; }).map(function(r){
       return {il: r.il, ilce: r.ilce, mah: r.mah, ada: r.ada, parsel: r.parsel, durum: r.status, not: r.userNote || '', elle_alan: r.manualArea || null, m2_fiyat: r.priceM2 || null};
     })};
+    if (offers.length) fc.teklifler = offers;
     return JSON.stringify(fc);
   }
   $('btnGeo').addEventListener('click', function(){
@@ -2271,6 +2346,7 @@ function poleOf(g){
             status: o.durum === 'hata' ? 'hata' : 'yok', note: o.durum === 'hata' ? 'Yedekten alındı' : '', feature: null, props: null, layer: null,
             userNote: String(o.not || ''), manualArea: o.elle_alan > 0 ? +o.elle_alan : null, priceM2: o.m2_fiyat > 0 ? +o.m2_fiyat : null});
         });
+        offers = Array.isArray(j.teklifler) ? j.teklifler.filter(function(o){ return o && o.name && Array.isArray(o.keys); }) : []; saveOffers(); renderOffers();
         showNotice(feats.length + ' parsel ' + doneMsg, true); renderTable(); fitAll(); saveRows();
       } catch (err) { showNotice('Dosya açılamadı: ' + err.message); }
     }
@@ -2368,7 +2444,7 @@ function poleOf(g){
       var on = !!cloudSess;
       $('arcList').innerHTML = all.length ? all.map(function(k){
         var where = k.loc && k.cl ? ' · ☁ bulutta' : k.cl ? ' · ☁ yalnız bulutta' : (on ? ' · yalnız bu cihazda' : '');
-        return '<div class="arc" data-name="' + esc(k.name) + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + where + '</div></div>' +
+        return '<div class="arc" data-name="' + esc(k.name) + '"><div class="ai"><div class="an">' + esc(k.name) + '</div><div class="am">' + esc(fmtDT(k.ts)) + ' · ' + k.n + ' parsel' + (k.miss ? ' · ' + k.miss + ' bulunamadı' : '') + (k.loc && k.loc.of ? ' · ' + k.loc.of + ' teklif' : '') + where + '</div></div>' +
           '<button type="button" class="arc-open">Aç</button><button type="button" class="arc-share">Paylaş</button><button type="button" class="arc-del danger">Sil</button></div>';
       }).join('') : '<div class="hint">Henüz kayıt yok.</div>';
     }).catch(function(e){ $('arcList').innerHTML = '<div class="hint">' + esc(e.message) + '</div>'; });
@@ -2381,7 +2457,7 @@ function poleOf(g){
     arcAll().then(function(list){
       var ex = list.filter(function(k){ return k.name === nm; })[0];
       if ((ex || cloudRows.some(function(c){ return c.name === nm; })) && !confirm('"' + nm + '" adlı kayıt var. Üzerine yazılsın mı?')) return null;
-      rec = {id: ex ? ex.id : Date.now(), name: nm, ts: Date.now(), n: found, miss: miss, title: $('outTitle').value, text: geoText()};
+      rec = {id: ex ? ex.id : Date.now(), name: nm, ts: Date.now(), n: found, miss: miss, title: $('outTitle').value, text: geoText(), of: offers.length};
       return arcTx('readwrite', function(st){ return st.put(rec); }).then(function(){ $('arcName').value = ''; arcRender();
         if (!cloudSess) { showNotice('Arşive kaydedildi (bu cihazda): ' + nm + '. Başka cihazda görmek için bulut hesabına giriş yapın.', true); return; }
         return cloudUpsert(rec).then(function(){ showNotice('Arşive kaydedildi (bulutta da): ' + nm, true); return cloudRefresh(); })

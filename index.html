@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.47</summary>
+        <summary>Ayarlar · sürüm 12.48</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1372,16 +1372,15 @@ function poleOf(g){
     if (e.target.classList.contains('of-info')) {
       var f = o.form = o.form || {};
       var who = prompt('Bu teklifi kim veriyor? (isim)', f.ofFrom || ''); if (who === null) return;
-      var tp = prompt('"' + o.name + '" için TOPLAM teklif tutarı (₺), örn. 7.500.000\nBirim fiyat (₺/m²) girecekseniz boş bırakın:', f.ofType === 'toplam' ? (f.ofVal || '') : ''); if (tp === null) return;
       f.ofFrom = who.trim();
-      if (tp.trim()) {
-        var tv = parseNum(tp), ar = offerRows(o).reduce(function(q, r){ return q + areaOf(r); }, 0);
-        if (tv > 0 && ar > 0 && tv / ar < 20 && confirm(tp.trim() + ' ₺ toplam olursa m² başına ' + (tv / ar).toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺ eder, çok düşük.\n\nBu tutar m² BAŞINA fiyat mı? (Tamam = ₺/m², İptal = toplam tutar olarak kalsın)')) { f.ofType = 'm2'; f.ofVal = tp.trim(); }
-        else { f.ofType = 'toplam'; f.ofVal = tp.trim(); }
-      }
-      else {
-        var pr = prompt('Teklif edilen ₺/m² (boş bırakılabilir):', f.ofType === 'm2' ? (f.ofVal || '') : ''); if (pr === null) return;
-        if (pr.trim()) { f.ofType = 'm2'; f.ofVal = pr.trim(); } else f.ofVal = '';
+      var pr = prompt('"' + o.name + '" için teklif edilen ₺/m² (m² başına), örn. 370\nToplam tutar girecekseniz boş bırakın:', f.ofType === 'm2' ? (f.ofVal || '') : ''); if (pr === null) return;
+      if (pr.trim()) {
+        var pv2 = parseNum(pr);
+        if (pv2 > 50000 && confirm(pr.trim() + ' ₺/m² çok yüksek görünüyor.\n\nBu TOPLAM teklif tutarı mı? (Tamam = toplam tutar, İptal = ₺/m² olarak kalsın)')) { f.ofType = 'toplam'; f.ofVal = pr.trim(); }
+        else { f.ofType = 'm2'; f.ofVal = pr.trim(); }
+      } else {
+        var tp = prompt('"' + o.name + '" için TOPLAM teklif tutarı (₺), örn. 7.500.000 (boş bırakılabilir):', f.ofType === 'toplam' ? (f.ofVal || '') : ''); if (tp === null) return;
+        if (tp.trim()) { f.ofType = 'toplam'; f.ofVal = tp.trim(); } else f.ofVal = '';
       }
       saveOffers(); renderOffers(); showNotice('Kaydedildi. Teklif PDF\'inin özet sayfasında görünecek.', true);
     } else if (e.target.classList.contains('of-load')) loadOffer(o);
@@ -3294,7 +3293,7 @@ function poleOf(g){
     lines.forEach(function(l){ total += l.t; area += l.a; l.au = l.r.priceM2 || 0; l.at = l.au ? Math.round(l.a * l.au) : 0; if (l.at > 0 && l.t > 0) { askTotal += l.at; cmpOffer += l.t; askN++; } });
     var off = lines.map(function(l){ return l.r; });
     return {multi: true, hasAsk: askN > 0, askTotal: askTotal, cmpOffer: cmpOffer, askN: askN, askArea: lines.reduce(function(a, l){ return a + (l.at > 0 && l.t > 0 ? l.a : 0); }, 0), off: off,
-      others: rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; }), mode: 'multi', val: total, area: area, unit: area ? total / area : 0, total: total, lines: lines,
+      others: rows.filter(function(r){ return r.feature && off.indexOf(r) < 0; }), mode: 'multi', umin: Math.min.apply(null, lines.filter(function(l){ return l.u > 0; }).map(function(l){ return l.u; })), umax: Math.max.apply(null, lines.map(function(l){ return l.u; })), val: total, area: area, unit: area ? total / area : 0, total: total, lines: lines,
       missArea: off.filter(function(r){ return !areaOf(r); }).length, names: sh.map(function(x){ return x.from || x.o.name; }), tos: sh.map(function(x){ return x.to; }).filter(Boolean)};
   }
   function syncOffer(){
@@ -3302,7 +3301,7 @@ function poleOf(g){
     $('ofValLbl').textContent = $('ofType').value === 'm2' ? 'Teklif (₺/m²)' : 'Teklif (toplam ₺)';
     $('ofInfo').textContent = d.off.length ? d.off.length + ' parsel · ' + fmtArea(d.area) + (d.total > 0 ? ' · toplam ' + fmtTL(d.total) + ' · ' + d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺/m²' : '') + (d.others.length ? ' · krokide ' + d.others.length + ' diğer parsel seçilebilir' : '') : 'Önce parselleri sorgulayın.';
     $('btnOffer').disabled = !d.off.length || !(d.val > 0);
-    if (d.multi) $('ofInfo').textContent = d.off.length + ' parsel · ' + fmtArea(d.area) + ' · ' + shownOffers().length + ' teklif açık' + (d.total > 0 ? ' · toplam ' + fmtTL(d.total) : ' · teklif tutarı girilmemiş (Tekliflerim → Kim / tutar)') + ' (üstteki kutular gerekmez)';
+    if (d.multi) $('ofInfo').textContent = d.off.length + ' parsel · ' + fmtArea(d.area) + ' · ' + shownOffers().length + ' teklif açık' + (d.total > 0 ? ' · teklif ' + (d.umax > 0 && d.umin > 0 && Math.abs(d.umax - d.umin) / d.umax > 0.005 ? d.umin.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' – ' : '') + d.umax.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺/m²' : ' · teklif tutarı girilmemiş (Tekliflerim → Kim / tutar)') + ' (üstteki kutular gerekmez)';
   }
   var OKEY = 'parsel-harita-teklif-v1';
   ['ofTo', 'ofFrom', 'ofType', 'ofVal', 'ofDays', 'ofTerms', 'ofMap'].forEach(function(id){
@@ -3316,6 +3315,7 @@ function poleOf(g){
       [{k: 'no', t: 'Sıra', w: 60}, {k: 'mah', t: 'Mahalle / konum', w: 250}, {k: 'ap', t: 'Ada / Parsel', w: 140}, {k: 'area', t: 'Yüzölçümü', w: 150}, {k: 'au', t: 'Bizim ₺/m²', w: 140}, {k: 'ou', t: 'Teklif ₺/m²', w: 140}, {k: 'at', t: 'Bizim tutar', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 190}, {k: 'df', t: 'Fark', w: 174}] :
       [{k: 'no', t: 'Sıra', w: 70}, {k: 'mah', t: 'Mahalle / konum', w: 350}, {k: 'ap', t: 'Ada / Parsel', w: 170}, {k: 'nit', t: 'Nitelik', w: 220}, {k: 'area', t: 'Yüzölçümü', w: 210}, {k: 'ou', t: '₺/m²', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 224}];
     var NUM = {area: 1, au: 1, ou: 1, at: 1, ot: 1, df: 1};
+    var fmU = function(d){ return d.umax > 0 && d.umin > 0 && Math.abs(d.umax - d.umin) / d.umax > 0.005 ? fm2(d.umin) + ' – ' + fm2(d.umax) : fm2(d.umax > 0 ? d.umax : 0); };
     var fm2 = function(v){ return v ? v.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺' : '—'; };
     var fdiff = function(v){ return (v > 0 ? '+' : v < 0 ? '−' : '') + fmtTL(Math.abs(v)); };
     var pct = function(o, a){ return a ? ((o - a) / a * 100) : 0; };
@@ -3356,7 +3356,7 @@ function poleOf(g){
     });
     y += 214 + 30;
     // özet kutucukları
-    var tw = (PW - 2 * M - 40) / 3, tiles = [['Teklif konusu parsel', d.lines.length + ' adet'], ['Toplam yüzölçümü', fmtArea(d.area)], [d.hasAsk ? 'm² fiyatı: bizim → teklif' : 'Teklif m² fiyatı', d.hasAsk ? (d.askTotal && d.area ? fm2(d.askTotal / d.askArea) : '—') + ' → ' + fm2(d.unit) : d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺']];
+    var tw = (PW - 2 * M - 40) / 3, tiles = [['Teklif konusu parsel', d.lines.length + ' adet'], ['Toplam yüzölçümü', fmtArea(d.area)], [d.hasAsk ? 'm² fiyatı: bizim → teklif' : 'Teklif m² fiyatı', d.hasAsk ? (d.askTotal && d.area ? fm2(d.askTotal / d.askArea) : '—') + ' → ' + (d.multi ? fmU(d) : fm2(d.unit)) : (d.multi ? fmU(d) : d.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺')]];
     tiles.forEach(function(t, i){
       var tx = M + i * (tw + 20);
       x.fillStyle = '#ffffff'; x.fillRect(tx, y, tw, 124); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(tx, y, tw, 124);
@@ -3365,15 +3365,15 @@ function poleOf(g){
     });
     y += 124 + 24;
     x.fillStyle = BRAND; x.fillRect(M, y, PW - 2 * M, 150);
-    x.fillStyle = 'rgba(255,255,255,.85)'; x.font = F(600, 24); x.fillText('TOPLAM TEKLİF BEDELİ', M + 30, y + 40);
-    x.fillStyle = '#ffffff'; x.font = F(700, 70); x.fillText(fmtTL(d.total), M + 30, y + 98);
+    x.fillStyle = 'rgba(255,255,255,.85)'; x.font = F(600, 24); x.fillText(d.multi ? 'TEKLİF EDİLEN FİYAT (m² başına)' : 'TOPLAM TEKLİF BEDELİ', M + 30, y + 40);
+    x.fillStyle = '#ffffff'; x.font = F(700, 70); x.fillText(d.multi ? fmU(d) + ' / m²' : fmtTL(d.total), M + 30, y + 98);
     y += 150 + 22;
     x.fillStyle = '#15262d'; x.font = F(500, 23); x.textAlign = 'left';
-    wrap(x, 'Yalnızca ' + trWords(d.total) + ' Türk Lirası\'dır.', PW - 2 * M).forEach(function(ln, i){ x.fillText(ln, M, y + 12 + i * 32); y += 0; });
+    if (!d.multi) wrap(x, 'Yalnızca ' + trWords(d.total) + ' Türk Lirası\'dır.', PW - 2 * M).forEach(function(ln, i){ x.fillText(ln, M, y + 12 + i * 32); y += 0; });
     y += 70;
     if (d.hasAsk) {
       var dv = d.cmpOffer - d.askTotal, pv = pct(d.cmpOffer, d.askTotal), bw3 = (PW - 2 * M - 40) / 3;
-      [['Bizim fiyatımız (toplam)', fmtTL(d.askTotal), BRAND], ['Teklif edilen (aynı parseller)', fmtTL(d.cmpOffer), BRAND], ['Fark (teklif − bizim)', fdiff(dv) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]].forEach(function(t, i){
+      (d.multi ? [['Bizim fiyatımız (ort. ₺/m²)', fm2(d.askTotal / d.askArea), BRAND], ['Teklif edilen (aynı parseller, ₺/m²)', fm2(d.cmpOffer / d.askArea), BRAND], ['Fark (₺/m²)', (function(q){ return (q > 0 ? '+' : q < 0 ? '−' : '') + fm2(Math.abs(q)).replace(' ₺', ' ₺'); })((d.cmpOffer - d.askTotal) / d.askArea) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]] : [['Bizim fiyatımız (toplam)', fmtTL(d.askTotal), BRAND], ['Teklif edilen (aynı parseller)', fmtTL(d.cmpOffer), BRAND], ['Fark (teklif − bizim)', fdiff(dv) + '  ·  ' + fpct(pv), dv < 0 ? '#b3261e' : dv > 0 ? '#1b7a3a' : BRAND]]).forEach(function(t, i){
         var tx = M + i * (bw3 + 20);
         x.fillStyle = '#f1f5fa'; x.fillRect(tx, y, bw3, 112); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(tx, y, bw3, 112);
         x.fillStyle = '#586a72'; x.font = F(400, 22); x.textAlign = 'left'; x.fillText(t[0], tx + 24, y + 32);
@@ -3419,8 +3419,8 @@ function poleOf(g){
     x.textAlign = 'right';
     var tcx = M;
     cols.forEach(function(c){
-      var tv = c.k === 'area' ? fmtArea(d.area) : c.k === 'ou' ? fm2(d.unit) : c.k === 'ot' ? fmtTL(d.total) : '';
-      if (d.hasAsk) {
+      var tv = c.k === 'area' ? fmtArea(d.area) : c.k === 'ou' ? (d.multi ? fmU(d) : fm2(d.unit)) : c.k === 'ot' ? (d.multi ? '' : fmtTL(d.total)) : '';
+      if (d.hasAsk && !d.multi) {
         if (c.k === 'au') tv = d.askArea ? fm2(d.askTotal / d.askArea) : '—';
         if (c.k === 'at') tv = fmtTL(d.askTotal);
         if (c.k === 'df') tv = fdiff(d.cmpOffer - d.askTotal);

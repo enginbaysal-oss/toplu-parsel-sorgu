@@ -617,7 +617,7 @@ a.btnlink.primary{background:var(--accent);border-color:var(--accent);color:var(
     </section>
     <section id="secSet" data-step="1 2 3 4" class="adv">
       <details>
-        <summary>Ayarlar · sürüm 12.38</summary>
+        <summary>Ayarlar · sürüm 12.39</summary>
         <div class="row">
           <label class="f grow">Servis adresi<input type="text" id="apiBase" spellcheck="false"></label>
           <label class="f" style="width:96px">Eşzamanlı
@@ -1311,6 +1311,16 @@ function poleOf(g){
   function rowKey(r){ return [r.il, r.ilce, r.mah, r.ada, r.parsel].map(function(x){ return String(x == null ? '' : x).trim().toLowerCase(); }).join('|'); }
   function saveOffers(){ try { localStorage.setItem(OFFERS_KEY, JSON.stringify(offers)); } catch (e) {} }
   function loadOffers(){ try { var a = JSON.parse(localStorage.getItem(OFFERS_KEY) || '[]'); if (Array.isArray(a)) offers = a.filter(function(o){ return o && o.name && Array.isArray(o.keys); }); } catch (e) {} }
+  var OFFER_COLORS = ['#c0392b', '#2471a3', '#1e8449', '#b9770e', '#7d3c98', '#117a65', '#a04000', '#34495e'];
+  function shownOffers(){
+    return offers.filter(function(o){ return o.show !== false; }).map(function(o, i){
+      var rs = offerRows(o).filter(function(r){ return !r.hidden; });
+      var f = o.form || {}, val = parseNum(f.ofVal) || 0, area = rs.reduce(function(a, r){ return a + areaOf(r); }, 0), total = 0, unit = 0;
+      if (val > 0) { if (f.ofType === 'toplam') { total = Math.round(val); unit = area ? total / area : 0; } else { unit = val; total = Math.round(area * val); } }
+      var mahs = []; rs.forEach(function(r){ if (r.mah && mahs.indexOf(r.mah) < 0) mahs.push(r.mah); });
+      return {o: o, rs: rs, color: OFFER_COLORS[i % OFFER_COLORS.length], area: area, unit: unit, total: total, from: f.ofFrom || '', to: f.ofTo || '', mahs: mahs};
+    }).filter(function(x){ return x.rs.length; }).map(function(x, i){ x.color = OFFER_COLORS[i % OFFER_COLORS.length]; return x; });
+  }
   function offerRows(o){ var set = {}; o.keys.forEach(function(k){ set[k] = 1; }); return rows.filter(function(r){ return r.feature && set[rowKey(r)]; }); }
   function renderOffers(){
     var box = $('ofList'); if (!box) return;
@@ -1319,7 +1329,7 @@ function poleOf(g){
       var ar = rs.reduce(function(a, r){ return a + areaOf(r); }, 0);
       var state = !rs.length ? '<span class="of-state hid">Parseller listede yok</span>' : vis === rs.length ? '<span class="of-state on">Haritada görünüyor</span>' : vis ? '<span class="of-state on">Kısmen görünüyor (' + vis + '/' + rs.length + ')</span>' : '<span class="of-state hid">Haritada gizli</span>';
       return '<div class="ofi' + (on ? '' : ' off') + '" data-id="' + esc(o.id) + '"><input type="checkbox" class="of-show" ' + (on ? 'checked' : '') + ' aria-label="Haritada göster"><div class="of-main"><div class="of-name">' + esc(o.name) + '</div><div class="of-meta">' + o.keys.length + ' parsel' + (ar ? ' · ' + esc(fmtArea(ar)) : '') + (o.total > 0 ? ' · ' + esc(fmtTL(o.total)) : '') + ' · ' + esc(fmtDT(o.ts)) + '</div>' + state + '</div>' +
-        '<button type="button" class="of-load">Yükle</button><button type="button" class="of-pdf">PDF</button><button type="button" class="of-del danger">Sil</button></div>';
+        '<button type="button" class="of-info">Kim / tutar</button><button type="button" class="of-load">Yükle</button><button type="button" class="of-pdf">PDF</button><button type="button" class="of-del danger">Sil</button></div>';
     }).join('') : '<div class="hint">Henüz kayıtlı teklif yok. Parselleri işaretleyip teklifi doldurun, ad verip "Teklifi kaydet"e basın.</div>';
     $('btnOfSave').disabled = !rows.some(function(r){ return r.feature; });
     $('ofAllRow').style.display = offers.length ? '' : 'none';
@@ -1358,7 +1368,13 @@ function poleOf(g){
   $('ofList').addEventListener('click', function(e){
     var box = e.target.closest('.ofi'); if (!box) return;
     var o = offers.filter(function(x){ return String(x.id) === box.dataset.id; })[0]; if (!o) return;
-    if (e.target.classList.contains('of-load')) loadOffer(o);
+    if (e.target.classList.contains('of-info')) {
+      var f = o.form = o.form || {};
+      var who = prompt('Bu teklifi kim veriyor? (isim)', f.ofFrom || ''); if (who === null) return;
+      var pr = prompt('Teklif edilen ₺/m² (boş bırakılabilir):', f.ofType === 'm2' || !f.ofType ? (f.ofVal || '') : ''); if (pr === null) return;
+      f.ofFrom = who.trim(); if (pr.trim()) { f.ofType = 'm2'; f.ofVal = pr.trim(); } else if (f.ofType === 'm2') f.ofVal = '';
+      saveOffers(); renderOffers(); showNotice('Kaydedildi. Teklif PDF\'inin özet sayfasında görünecek.', true);
+    } else if (e.target.classList.contains('of-load')) loadOffer(o);
     else if (e.target.classList.contains('of-pdf')) { loadOffer(o); if (!$('btnOffer').disabled) $('btnOffer').click(); else showNotice('Teklif tutarı eksik; "Yükle" ile alanları kontrol edin.'); }
     else if (e.target.classList.contains('of-del')) { if (confirm('"' + o.name + '" teklifi silinsin mi? (Parseller silinmez.)')) { offers.splice(offers.indexOf(o), 1); saveOffers(); renderOffers(); } }
   });
@@ -2967,12 +2983,24 @@ function poleOf(g){
     ctx.textAlign = 'right'; ctx.fillText(new Date().toLocaleDateString('tr-TR'), W - 36 * u, hH * 0.42);
     // alt bant
     ctx.fillStyle = '#f1f5f6'; ctx.fillRect(0, hH + H, W, fH);
+    if (!(o.legendItems && o.legendItems.length)) {
     ctx.fillStyle = footPat;
     ctx.fillRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
     ctx.strokeStyle = globalColor; ctx.lineWidth = 2 * u; ctx.strokeRect(36 * u, hH + H + fH * 0.3, 54 * u, fH * 0.4);
+    }
     ctx.fillStyle = '#15262d'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '500 ' + Math.round(21 * u) + 'px system-ui, Arial, sans-serif';
-    ctx.fillText(o.legend1 || 'Sorgulanan parsel', 104 * u, hH + H + fH * 0.5);
-    if (o.others && o.others.length) {
+    var legendDone = false;
+    if (o.legendItems && o.legendItems.length) {
+      legendDone = true; var lxx = 36 * u;
+      ctx.font = '500 ' + Math.round(21 * u) + 'px system-ui, Arial, sans-serif';
+      o.legendItems.forEach(function(li){
+        ctx.fillStyle = li.color; ctx.fillRect(lxx, hH + H + fH * 0.3, 40 * u, fH * 0.4);
+        ctx.fillStyle = '#15262d'; ctx.textAlign = 'left'; ctx.fillText(li.label, lxx + 52 * u, hH + H + fH * 0.5);
+        lxx += 52 * u + ctx.measureText(li.label).width + 36 * u;
+      });
+    } else ctx.fillText(o.legend1 || 'Sorgulanan parsel', 104 * u, hH + H + fH * 0.5);
+    if (!legendDone) o.legendItems = null;
+    if (o.others && o.others.length && !legendDone) {
       var lx2 = 104 * u + ctx.measureText(o.legend1 || 'Sorgulanan parsel').width + 50 * u;
       ctx.fillStyle = 'rgba(100,112,130,0.30)'; ctx.fillRect(lx2, hH + H + fH * 0.3, 54 * u, fH * 0.4);
       ctx.strokeStyle = '#4d5a6e'; ctx.lineWidth = 2 * u; ctx.strokeRect(lx2, hH + H + fH * 0.3, 54 * u, fH * 0.4);
@@ -3247,7 +3275,7 @@ function poleOf(g){
     $(id).addEventListener('change', function(){ syncOffer(); });
   });
   try { var os = JSON.parse(localStorage.getItem(OKEY) || 'null'); if (os) Object.keys(os).forEach(function(k){ if ($(k)) $(k).value = os[k]; }); } catch (e) {}
-  function renderOfferPages(d, meta){
+  function renderOfferPages(d, meta, summary){
     var PW = 1654, PH = 2339, M = 110, RH = 66, pages = [];
     var cols = d.hasAsk ?
       [{k: 'no', t: 'Sıra', w: 60}, {k: 'mah', t: 'Mahalle / konum', w: 250}, {k: 'ap', t: 'Ada / Parsel', w: 140}, {k: 'area', t: 'Yüzölçümü', w: 150}, {k: 'au', t: 'Bizim ₺/m²', w: 140}, {k: 'ou', t: 'Teklif ₺/m²', w: 140}, {k: 'at', t: 'Bizim tutar', w: 190}, {k: 'ot', t: 'Teklif tutarı', w: 190}, {k: 'df', t: 'Fark', w: 174}] :
@@ -3390,6 +3418,30 @@ function poleOf(g){
       x.strokeStyle = '#cfd8e3'; x.beginPath(); x.moveTo(bx + 20, y + 150); x.lineTo(bx + bw - 20, y + 150); x.stroke();
       x.fillStyle = '#8a97a8'; x.font = F(400, 18); x.fillText('Tarih / İmza', bx + 20, y + 172);
     });
+    // çoklu teklif özeti: kim nereye teklif veriyor
+    if (summary && summary.length) {
+      P = newPage(false); x = P.x; y = 190;
+      x.fillStyle = BRAND; x.font = F(700, 34); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('TEKLİF ÖZETİ · Kim nereye teklif veriyor', M, y + 20);
+      y += 70;
+      summary.forEach(function(sm){
+        var plist = sm.rs.map(function(r){ return r.ada + '/' + r.parsel; }).join(', ');
+        x.font = F(400, 22); var pl = wrap(x, 'Parseller: ' + plist, PW - 2 * M - 420).slice(0, 3), RHs = 150 + (pl.length - 1) * 30;
+        if (y + RHs > LIM) { P = newPage(false); x = P.x; y = 190; }
+        x.fillStyle = '#f7f9fc'; x.fillRect(M, y, PW - 2 * M, RHs); x.strokeStyle = '#cfd8e3'; x.lineWidth = 2; x.strokeRect(M, y, PW - 2 * M, RHs);
+        x.fillStyle = sm.color; x.fillRect(M, y, 18, RHs);
+        x.textBaseline = 'middle'; x.textAlign = 'left';
+        x.fillStyle = '#15262d'; x.font = F(700, 28); x.fillText(fit(x, sm.o.name, PW - 2 * M - 460), M + 40, y + 32);
+        x.fillStyle = '#586a72'; x.font = F(400, 22);
+        x.fillText(fit(x, [sm.from ? 'Teklif veren: ' + sm.from : '', sm.to ? 'Muhatap: ' + sm.to : ''].filter(Boolean).join('   ·   ') || 'Teklif veren: ' + sm.o.name, PW - 2 * M - 460), M + 40, y + 68);
+        x.fillText(fit(x, 'Konum: ' + ((sm.mahs.join(', ') + (sm.rs[0] && sm.rs[0].ilce ? ' · ' + sm.rs[0].ilce : '')) || '—'), PW - 2 * M - 460), M + 40, y + 100);
+        pl.forEach(function(ln, i){ x.fillText(ln, M + 40, y + 132 + i * 30 - (i ? 0 : 0)); });
+        x.textAlign = 'right';
+        x.fillStyle = '#586a72'; x.font = F(400, 22); x.fillText(sm.rs.length + ' parsel · ' + fmtArea(sm.area), PW - M - 24, y + 32);
+        x.fillStyle = BRAND; x.font = F(700, 34); x.fillText(sm.total > 0 ? fmtTL(sm.total) : 'Tutar girilmemiş', PW - M - 24, y + 76);
+        x.fillStyle = '#586a72'; x.font = F(400, 22); x.fillText(sm.unit > 0 ? sm.unit.toLocaleString('tr-TR', {maximumFractionDigits: 2}) + ' ₺/m²' : '', PW - M - 24, y + 112);
+        y += RHs + 16;
+      });
+    }
     // alt bilgi
     pages.forEach(function(pg, i){
       var xx = pg.x; xx.fillStyle = '#586a72'; xx.font = F(400, 21); xx.textAlign = 'center'; xx.textBaseline = 'middle';
@@ -3412,17 +3464,24 @@ function poleOf(g){
       showNotice('Teklif hazırlanıyor…', true);
       var cap0 = window.Capacitor, isNat = !!(cap0 && cap0.isNativePlatform && cap0.isNativePlatform());
       var budget = (parseInt($('outQ').value, 10) || 10000000) * (isNat ? 1 : 2.5), lastErr = null, withOthers = $('ofMap').value === 'all' && d.others.length > 0;
+      var sm = shownOffers(), multi = sm.length >= 2, mapItems = d.off, legendItems = null;
+      if (multi) {
+        mapItems = []; legendItems = [];
+        sm.slice().reverse().forEach(function(x){ x.rs.forEach(function(r){ var c = Object.create(r); c.color = x.color; c.lineColor = x.color; c.hatch = null; mapItems.push(c); }); });
+        sm.forEach(function(x){ legendItems.push({color: x.color, label: x.o.name + (x.from ? ' · ' + x.from : '')}); });
+        withOthers = false;
+      }
       for (var attempt = 0; attempt < 3 && !res; attempt++) {
         try {
-          res = await renderMapImage({title: 'Teklif Kroki · ' + meta.no, base: $('base').value, maxArea: budget, labels: true, items: d.off, others: withOthers ? d.others : [], fitAll: withOthers,
-            legend1: 'Teklif konusu parsel', subtitle: d.off.length + ' parsel teklif konusu' + (withOthers ? ' · ' + d.others.length + ' diğer parsel' : ''),
+          res = await renderMapImage({title: 'Teklif Kroki · ' + meta.no, base: $('base').value, maxArea: budget, labels: true, items: mapItems, legendItems: legendItems, others: withOthers ? d.others : [], fitAll: withOthers,
+            legend1: 'Teklif konusu parsel', subtitle: multi ? sm.length + ' teklif · ' + mapItems.length + ' parsel' : d.off.length + ' parsel teklif konusu' + (withOthers ? ' · ' + d.others.length + ' diğer parsel' : ''),
             onProgress: function(pc){ showNotice('Kroki karoları indiriliyor… %' + pc, true); }});
         } catch (e) { lastErr = e; res = null; budget = budget / 2.5; }
       }
       if (!res) throw lastErr || new Error('Kroki oluşturulamadı');
       showNotice('PDF hazırlanıyor…', true);
       await loadJsPdf();
-      var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta);
+      var JS = window.jspdf.jsPDF, pgs = renderOfferPages(d, meta, multi ? sm : null);
       var doc = new JS({orientation: 'portrait', unit: 'mm', format: [210, 297], compress: true});
       pgs.forEach(function(c, i){ if (i) doc.addPage([210, 297], 'portrait'); doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
       var cw = res.canvas.width, ch = res.canvas.height, long = 297, pw = cw >= ch ? long : long * cw / ch, ph = cw >= ch ? long * ch / cw : long;
